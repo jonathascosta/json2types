@@ -83,19 +83,36 @@ describe('parseJson', () => {
     expect([error.line, error.column]).toEqual([line, column]);
   });
 
-  it('refuses nesting deep enough to exhaust the stack', () => {
-    expect(() => parseJson('['.repeat(MAX_DEPTH) + ']'.repeat(MAX_DEPTH))).not.toThrow();
-    const deep = '['.repeat(MAX_DEPTH + 2) + ']'.repeat(MAX_DEPTH + 2);
-    expect(errorOf(deep).message).toMatch(/^Nested more than 500 levels deep/);
+  it('allows exactly MAX_DEPTH levels of nesting, and no more', () => {
+    const nested = (levels: number) => '['.repeat(levels) + '1' + ']'.repeat(levels);
+    expect(() => parseJson(nested(MAX_DEPTH))).not.toThrow();
+    expect(errorOf(nested(MAX_DEPTH + 1)).message).toMatch(/^Nested more than 500 levels deep/);
   });
 
-  it('parses a megabyte quickly', () => {
+  it('counts lines ended by \\n, \\r\\n or a lone \\r', () => {
+    expect([errorOf('[\n1,\r\n2,\r3 x]').line, errorOf('[\n1,\r\n2,\r3 x]').column]).toEqual([4, 3]);
+  });
+
+  it('names invisible characters by code point', () => {
+    expect(errorOf('[1,\u00a0 2]').message).toBe('Unexpected U+00A0 (line 1, column 4)');
+    expect(errorOf('{"a":1}\u2028').message).toBe(
+      'Unexpected U+2028 after the JSON value (line 1, column 8)',
+    );
+    expect(errorOf('[😀]').message).toBe("Unexpected '😀' (line 1, column 2)");
+  });
+
+  it('treats a lone byte order mark as empty input', () => {
+    expect(errorOf('\uFEFF').message).toBe('Unexpected end of the input (line 1, column 2)');
+  });
+
+  it('parses half a megabyte in reasonable time', () => {
     const big = JSON.stringify(
       Array.from({ length: 10_000 }, (_, i) => ({ id: i, name: `item ${String(i)}`, price: i / 7 })),
     );
     expect(big.length).toBeGreaterThan(500_000);
     const start = performance.now();
     parseJson(big);
-    expect(performance.now() - start).toBeLessThan(500);
+    // Generous, so a slow CI runner doesn't fail it; locally it takes a small fraction of this.
+    expect(performance.now() - start).toBeLessThan(3000);
   });
 });

@@ -1,5 +1,5 @@
 import type { Diagnostic, Model, ObjectDeclaration, Property, PropertyType, TypeRef } from './model';
-import { singular, typeName } from './names';
+import { avoidReserved, singular, typeName } from './names';
 import type { JsonValue } from './parse';
 
 export interface InferOptions {
@@ -14,12 +14,32 @@ export interface InferOptions {
  */
 export function inferModel(json: JsonValue, options: InferOptions = {}): Model {
   const shape = newShape();
-  const diagnostics: Diagnostic[] = [];
+  const diagnostics = new Diagnostics();
   addSample(shape, json, '$', diagnostics);
-  const resolver = new Resolver(diagnostics);
   const rootName = typeName(options.rootName ?? 'Root');
+  const resolver = new Resolver(diagnostics);
   const root = resolver.resolve(shape, '$', rootName, rootName);
-  return { root, declarations: resolver.declarationsFrom(root.type), diagnostics };
+  const { type, declarations } = resolver.name(root.type, rootName);
+  return { root: { type, nullable: root.nullable }, declarations, diagnostics: diagnostics.list() };
+}
+
+/** Collects diagnostics, folding repeats at the same place into one with a count. */
+class Diagnostics {
+  private readonly byKey = new Map<
+    string,
+    { path: string; severity: Diagnostic['severity']; message: string; count: number }
+  >();
+
+  add(path: string, severity: Diagnostic['severity'], message: string): void {
+    const key = `${path}\n${message}`;
+    const seen = this.byKey.get(key);
+    if (seen) seen.count++;
+    else this.byKey.set(key, { path, severity, message, count: 1 });
+  }
+
+  list(): Diagnostic[] {
+    return [...this.byKey.values()];
+  }
 }
 
 // Phase 1: everything seen at each place in the JSON, merged into one shape.
@@ -36,9 +56,13 @@ interface Shape {
 }
 
 interface StringShape {
-  dateTime: boolean;
+  /** Every string was a date or a date-time. */
+  temporal: boolean;
+  /** Every string was a date (no time). */
   date: boolean;
   guid: boolean;
+  withOffset: number;
+  withoutOffset: number;
 }
 
 interface NumberShape {
@@ -62,24 +86,27 @@ function newShape(): Shape {
 }
 
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+// Strict ISO 8601, as System.Text.Json reads it: a T between date and time, and a Z or ±hh:mm offset.
 const DATE_TIME =
-  /^(\d{4})-(\d{2})-(\d{2})[Tt ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:[Zz]|[+-]\d{2}:?\d{2})?$/;
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,7})?)?(Z|[+-](\d{2}):(\d{2}))?$/;
 const GUID = /^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$/;
 
 function isRealDate(year: string, month: string, day: string): boolean {
-  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  // setUTCFullYear, unlike Date.UTC, doesn't read years 0 to 99 as 1900 to 1999.
+  const date = new Date(0);
+  date.setUTCFullYear(Number(year), Number(month) - 1, Number(day));
   return date.getUTCMonth() === Number(month) - 1 && date.getUTCDate() === Number(day);
 }
 
-function isDate(value: string): boolean {
-  const match = DATE.exec(value);
-  return match !== null && isRealDate(match[1] ?? '', match[2] ?? '', match[3] ?? '');
-}
-
-function isDateTime(value: string): boolean {
+/** 'date', 'offset' (a date-time with a zone), 'local' (a date-time without one), or null. */
+function temporalKind(value: string): 'date' | 'offset' | 'local' | null {
+  const date = DATE.exec(value);
+  if (date) return isRealDate(date[1] ?? '', date[2] ?? '', date[3] ?? '') ? 'date' : null;
   const match = DATE_TIME.exec(value);
-  if (!match || !isRealDate(match[1] ?? '', match[2] ?? '', match[3] ?? '')) return false;
-  return Number(match[4]) < 24 && Number(match[5]) < 60 && Number(match[6] ?? 0) < 60;
+  if (!match || !isRealDate(match[1] ?? '', match[2] ?? '', match[3] ?? '')) return null;
+  if (Number(match[4]) > 23 || Number(match[5]) > 59 || Number(match[6] ?? 0) > 59) return null;
+  if (match[8] !== undefined && (Number(match[8]) > 23 || Number(match[9]) > 59)) return null;
+  return match[7] === undefined ? 'local' : 'offset';
 }
 
 const INT32 = 2n ** 31n;
@@ -96,7 +123,7 @@ function numberShape(raw: string): NumberShape {
 const widerBits = (a: NumberShape['bits'], b: NumberShape['bits']): NumberShape['bits'] =>
   a === 'big' || b === 'big' ? 'big' : a === 64 || b === 64 ? 64 : 32;
 
-function addSample(shape: Shape, value: JsonValue, path: string, diagnostics: Diagnostic[]): void {
+function addSample(shape: Shape, value: JsonValue, path: string, diagnostics: Diagnostics): void {
   shape.count++;
   switch (value.type) {
     case 'null':
@@ -106,10 +133,19 @@ function addSample(shape: Shape, value: JsonValue, path: string, diagnostics: Di
       shape.booleans++;
       return;
     case 'string': {
-      const strings = (shape.strings ??= { dateTime: true, date: true, guid: true });
-      strings.dateTime &&= isDateTime(value.value);
-      strings.date &&= isDate(value.value);
+      const strings = (shape.strings ??= {
+        temporal: true,
+        date: true,
+        guid: true,
+        withOffset: 0,
+        withoutOffset: 0,
+      });
+      const temporal = temporalKind(value.value);
+      strings.temporal &&= temporal !== null;
+      strings.date &&= temporal === 'date';
       strings.guid &&= GUID.test(value.value);
+      if (temporal === 'offset') strings.withOffset++;
+      else if (temporal !== null) strings.withoutOffset++;
       return;
     }
     case 'number': {
@@ -133,11 +169,11 @@ function addSample(shape: Shape, value: JsonValue, path: string, diagnostics: Di
       const fields = new Map<string, JsonValue>();
       for (const { key, value: fieldValue } of value.entries) {
         if (fields.has(key)) {
-          diagnostics.push({
-            path: propertyPath(path, key),
-            severity: 'warning',
-            message: `The key "${key}" appears more than once in the same object; the last value is used.`,
-          });
+          diagnostics.add(
+            propertyPath(path, key),
+            'warning',
+            `The key "${key}" appears more than once in the same object; the last value is used.`,
+          );
         }
         fields.set(key, fieldValue);
       }
@@ -158,14 +194,30 @@ function propertyPath(path: string, key: string): string {
   return /^[A-Za-z_$][\w$]*$/.test(key) ? `${path}.${key}` : `${path}[${JSON.stringify(key)}]`;
 }
 
-// Phase 2: shapes into types, with object types named and identical ones shared.
+function stringType(strings: StringShape): TypeRef {
+  if (strings.date) return { kind: 'date' };
+  if (strings.temporal) {
+    const offset = strings.withoutOffset === 0 ? 'always' : strings.withOffset === 0 ? 'never' : 'mixed';
+    return { kind: 'dateTime', offset };
+  }
+  if (strings.guid) return { kind: 'guid' };
+  return { kind: 'string' };
+}
+
+// Phase 2: shapes into types. Object types are first collected under placeholder ids, identical
+// ones shared; then named from the root down, so the root and outer types get the plain names.
+
+interface Pending {
+  readonly hint: string;
+  readonly properties: Property[];
+}
 
 class Resolver {
-  private readonly declarations = new Map<string, ObjectDeclaration>();
-  /** Declaration name by structure, so identical objects share one type. */
+  private readonly pending: Pending[] = [];
+  /** Placeholder id by structure, so identical objects share one type. */
   private readonly byStructure = new Map<string, string>();
 
-  constructor(private readonly diagnostics: Diagnostic[]) {}
+  constructor(private readonly diagnostics: Diagnostics) {}
 
   /**
    * @param nameHint What to call an object found here.
@@ -182,13 +234,12 @@ class Resolver {
     ].filter((kind): kind is string => typeof kind === 'string');
 
     if (kinds.length === 0) {
-      if (shape.count > 0) {
-        this.note(path, 'info', 'Only null values here, so the type is unknown.');
-      }
+      if (shape.count > 0)
+        this.diagnostics.add(path, 'info', 'Only null values here, so the type is unknown.');
       return { type: { kind: 'any' }, nullable };
     }
     if (kinds.length > 1) {
-      this.note(
+      this.diagnostics.add(
         path,
         'warning',
         `Values of different kinds here (${kinds.join(', ')}), so the type is unknown.`,
@@ -196,75 +247,94 @@ class Resolver {
       return { type: { kind: 'any' }, nullable };
     }
 
-    if (shape.strings) {
-      const { dateTime, date, guid } = shape.strings;
-      const kind = dateTime ? 'dateTime' : date ? 'date' : guid ? 'guid' : 'string';
-      return { type: { kind }, nullable };
-    }
+    if (shape.strings) return { type: stringType(shape.strings), nullable };
     if (shape.numbers) {
       const { decimal, bits } = shape.numbers;
       return { type: decimal ? { kind: 'decimal' } : { kind: 'integer', bits }, nullable };
     }
-    if (shape.object) return { type: this.declare(shape.object, path, nameHint), nullable };
+    if (shape.object) return { type: this.collect(shape.object, path, nameHint), nullable };
     if (shape.array) {
       if (!shape.array.items) {
-        this.note(path, 'info', 'Only empty arrays here, so the item type is unknown.');
-        return { type: { kind: 'array', items: { kind: 'any' } }, nullable };
+        this.diagnostics.add(path, 'info', 'Only empty arrays here, so the item type is unknown.');
+        return { type: { kind: 'array', items: { type: { kind: 'any' }, nullable: false } }, nullable };
       }
       const items = this.resolve(shape.array.items, `${path}[*]`, itemHint, itemHint);
-      if (items.nullable) {
-        this.note(`${path}[*]`, 'info', 'Some items are null; the item type is used as is.');
-      }
-      return { type: { kind: 'array', items: items.type }, nullable };
+      return { type: { kind: 'array', items }, nullable };
     }
     return { type: { kind: 'boolean' }, nullable };
   }
 
-  private declare(object: ObjectShape, path: string, nameHint: string): TypeRef {
+  private collect(object: ObjectShape, path: string, nameHint: string): TypeRef {
     const properties: Property[] = [];
     for (const [key, field] of object.fields) {
       const hint = typeName(key);
-      const type = this.resolve(field, propertyPath(path, key), hint, singular(hint));
+      const type = this.resolve(field, propertyPath(path, key), hint, avoidReserved(singular(hint)));
       properties.push({ jsonName: key, ...type, optional: field.count < object.count });
     }
 
-    const structure = JSON.stringify(properties);
-    const existing = this.byStructure.get(structure);
+    // Empty objects aren't shared: two unrelated {} would otherwise become one oddly named type.
+    // Property order doesn't matter for sharing; the first type found keeps its own order.
+    const structure =
+      properties.length === 0
+        ? null
+        : JSON.stringify([...properties].sort((a, b) => compare(a.jsonName, b.jsonName)));
+    const existing = structure === null ? undefined : this.byStructure.get(structure);
     if (existing) return { kind: 'object', name: existing };
 
-    const name = this.uniqueName(nameHint);
-    this.declarations.set(name, { name, properties });
-    this.byStructure.set(structure, name);
-    return { kind: 'object', name };
+    const id = `#${String(this.pending.length)}`;
+    this.pending.push({ hint: nameHint, properties });
+    if (structure !== null) this.byStructure.set(structure, id);
+    return { kind: 'object', name: id };
   }
 
-  private uniqueName(hint: string): string {
-    if (!this.declarations.has(hint)) return hint;
-    for (let n = 2; ; n++) {
-      const name = `${hint}${String(n)}`;
-      if (!this.declarations.has(name)) return name;
-    }
-  }
-
-  private note(path: string, severity: Diagnostic['severity'], message: string): void {
-    this.diagnostics.push({ path, severity, message });
-  }
-
-  /** The declarations reachable from the root, parents before children. */
-  declarationsFrom(root: TypeRef): ObjectDeclaration[] {
-    const ordered: ObjectDeclaration[] = [];
-    const visit = (type: TypeRef): void => {
-      if (type.kind === 'array') {
-        visit(type.items);
-        return;
-      }
-      if (type.kind !== 'object' || ordered.some((d) => d.name === type.name)) return;
-      const declaration = this.declarations.get(type.name);
-      if (!declaration) return;
-      ordered.push(declaration);
-      for (const property of declaration.properties) visit(property.type);
+  /** Names the collected types from the root down; returns the root and the declarations. */
+  name(root: TypeRef, rootName: string): { type: TypeRef; declarations: ObjectDeclaration[] } {
+    const names = new Map<string, string>();
+    const used = new Set<string>();
+    const claim = (hint: string): string => {
+      let name = hint;
+      for (let n = 2; used.has(name); n++) name = `${hint}${String(n)}`;
+      used.add(name);
+      return name;
     };
-    visit(root);
-    return ordered;
+
+    // Breadth first, so every type is named before the types inside it.
+    const order: string[] = [];
+    const seen = new Set<string>();
+    const queue: { id: string; hint: string }[] = [];
+    const enqueue = (type: TypeRef, hint?: string): void => {
+      if (type.kind === 'array') {
+        enqueue(type.items.type, hint);
+      } else if (type.kind === 'object' && !seen.has(type.name)) {
+        seen.add(type.name);
+        queue.push({ id: type.name, hint: hint ?? this.pendingFor(type.name).hint });
+      }
+    };
+    enqueue(root, rootName);
+    for (let next = queue.shift(); next; next = queue.shift()) {
+      names.set(next.id, claim(next.hint));
+      order.push(next.id);
+      for (const property of this.pendingFor(next.id).properties) enqueue(property.type);
+    }
+
+    const rename = (type: TypeRef): TypeRef => {
+      if (type.kind === 'array')
+        return { kind: 'array', items: { ...type.items, type: rename(type.items.type) } };
+      if (type.kind === 'object') return { kind: 'object', name: names.get(type.name) ?? type.name };
+      return type;
+    };
+    const declarations = order.map((id) => ({
+      name: names.get(id) ?? id,
+      properties: this.pendingFor(id).properties.map((p) => ({ ...p, type: rename(p.type) })),
+    }));
+    return { type: rename(root), declarations };
+  }
+
+  private pendingFor(id: string): Pending {
+    const pending = this.pending[Number(id.slice(1))];
+    if (!pending) throw new Error(`No type ${id}`);
+    return pending;
   }
 }
+
+const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);

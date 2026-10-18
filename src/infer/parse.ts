@@ -32,7 +32,7 @@ export class JsonParseError extends Error {
   }
 }
 
-/** How deeply arrays and objects may nest before parsing gives up, to keep the stack safe. */
+/** How many levels arrays and objects may nest (the outermost is level 1), to keep the stack safe. */
 export const MAX_DEPTH = 500;
 
 const ESCAPES: Readonly<Record<string, string>> = {
@@ -55,7 +55,9 @@ export function parseJson(text: string): JsonValue {
     let line = 1;
     let lineStart = 0;
     for (let i = 0; i < at; i++) {
-      if (text.charCodeAt(i) === 10) {
+      const c = text.charCodeAt(i);
+      // \n, \r\n and a lone \r each end a line.
+      if (c === 10 || (c === 13 && text.charCodeAt(i + 1) !== 10)) {
         line++;
         lineStart = i + 1;
       }
@@ -64,9 +66,14 @@ export function parseJson(text: string): JsonValue {
   };
 
   const describe = (at: number): string => {
-    if (at >= text.length) return 'the end of the input';
-    const char = text[at] ?? '';
-    return /\s/.test(char) ? 'whitespace' : `'${char}'`;
+    const code = text.codePointAt(at);
+    if (code === undefined) return 'the end of the input';
+    const char = String.fromCodePoint(code);
+    // Invisible characters by their code point, so "found ' '" never hides a non-breaking space.
+    if (/[\s\p{C}\p{Z}]/u.test(char)) {
+      return `U+${code.toString(16).toUpperCase().padStart(4, '0')}`;
+    }
+    return `'${char}'`;
   };
 
   const skipWhitespace = (): void => {
@@ -119,8 +126,10 @@ export function parseJson(text: string): JsonValue {
 
   const parseValue = (depth: number): JsonValue => {
     skipWhitespace();
-    if (depth > MAX_DEPTH) fail(`Nested more than ${String(MAX_DEPTH)} levels deep`);
     const char = text[pos];
+    if ((char === '{' || char === '[') && depth >= MAX_DEPTH) {
+      fail(`Nested more than ${String(MAX_DEPTH)} levels deep`);
+    }
     switch (char) {
       case '{': {
         pos++;

@@ -55,16 +55,26 @@ const RESERVED = new Set([
   'Window',
 ]);
 
-/** Turns any JSON key into a PascalCase type name: "home address" → HomeAddress, "2fa" → Item2fa. */
+/** Appends Item to names that would shadow a common built-in type: String → StringItem. */
+export function avoidReserved(name: string): string {
+  return RESERVED.has(name) ? `${name}Item` : name;
+}
+
+/**
+ * Turns any JSON key into a PascalCase type name: "home address" → HomeAddress, "2fa" → Item2fa.
+ * Words are letters (with their accents), decimal digits and letter-like numbers; everything else
+ * separates them, so the result is a valid identifier in C# and TypeScript.
+ */
 export function typeName(key: string): string {
   const words = key
-    .replace(/(\p{Ll}|\p{N})(\p{Lu})/gu, '$1 $2')
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((word) => word.length > 0);
+    .normalize('NFC')
+    .replace(/([\p{Ll}\p{Nd}])(\p{Lu})/gu, '$1 $2')
+    .split(/[^\p{L}\p{M}\p{Nd}\p{Nl}]+/u)
+    .filter((word) => /^[\p{L}\p{Nd}\p{Nl}]/u.test(word));
   let name = words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join('');
   if (name === '') return 'Item';
-  if (/^\p{N}/u.test(name)) name = `Item${name}`;
-  return RESERVED.has(name) ? `${name}Item` : name;
+  if (/^\p{Nd}/u.test(name)) name = `Item${name}`;
+  return avoidReserved(name);
 }
 
 const IRREGULAR: Readonly<Record<string, string>> = {
@@ -86,6 +96,9 @@ const IRREGULAR: Readonly<Record<string, string>> = {
   zombies: 'zombie',
   ties: 'tie',
   pies: 'pie',
+  gases: 'gas',
+  quizzes: 'quiz',
+  buses: 'bus',
 };
 
 /** Words that are the same in the plural, or have no singular worth using. */
@@ -107,7 +120,7 @@ const UNCOUNTABLE = new Set([
 /**
  * The name for one item of an array called `name`: Items → Item, Categories → Category,
  * Addresses → Address, People → Person. When there is no clear singular (Data, Status, List),
- * the result is the name followed by Item.
+ * the result is the name followed by Item. Pass the result through avoidReserved: Errors → Error.
  */
 export function singular(name: string): string {
   const split = /^(.*?)(\p{Lu}[^\p{Lu}]*)$/u.exec(name);
@@ -118,7 +131,10 @@ export function singular(name: string): string {
 
   const irregular = IRREGULAR[lower];
   if (irregular) return restore(irregular);
-  if (UNCOUNTABLE.has(lower) || lower.length < 3) return `${name}Item`;
+  if (UNCOUNTABLE.has(lower)) return `${name}Item`;
+  // An acronym in the plural: URLs → URL, UserIDs → UserID.
+  if (/\p{Lu}{2,}s$/u.test(name)) return name.slice(0, -1);
+  if (lower.length < 3) return `${name}Item`;
   if (/[^aeiou]ies$/.test(lower)) return restore(`${lower.slice(0, -3)}y`);
   if (/(?:ss|x|ch|sh|zz|us)es$/.test(lower)) return restore(lower.slice(0, -2));
   if (/[^isu]s$/.test(lower)) return restore(lower.slice(0, -1));

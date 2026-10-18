@@ -5,8 +5,12 @@
 
 export type TypeRef =
   | { readonly kind: 'string' }
-  /** Strings that were always ISO 8601 date-times, e.g. 2026-10-18T12:00:00Z. */
-  | { readonly kind: 'dateTime' }
+  /**
+   * Strings that were always strict ISO 8601 date-times, e.g. 2026-10-18T12:00:00Z. `offset` says
+   * whether they carried a time zone (Z or ±hh:mm): always, never, or only some of them. Dates
+   * mixed in count as having none.
+   */
+  | { readonly kind: 'dateTime'; readonly offset: 'always' | 'never' | 'mixed' }
   /** Strings that were always ISO 8601 dates, e.g. 2026-10-18. */
   | { readonly kind: 'date' }
   /** Strings that were always GUIDs, e.g. 3f2504e0-4f89-11d3-9a0c-0305e82c3301. */
@@ -18,7 +22,8 @@ export type TypeRef =
   | { readonly kind: 'boolean' }
   /** Nothing to infer from (only nulls, an empty array) or values of different kinds. */
   | { readonly kind: 'any' }
-  | { readonly kind: 'array'; readonly items: TypeRef }
+  /** `items.nullable` is true when some items were null. */
+  | { readonly kind: 'array'; readonly items: PropertyType }
   /** A declared object type, by name. */
   | { readonly kind: 'object'; readonly name: string };
 
@@ -47,6 +52,8 @@ export interface Diagnostic {
   readonly path: string;
   readonly severity: 'warning' | 'info';
   readonly message: string;
+  /** How many times it happened there, e.g. once per item of an array. */
+  readonly count: number;
 }
 
 export interface Model {
