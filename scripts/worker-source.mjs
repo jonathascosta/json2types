@@ -23,7 +23,12 @@ export function workerSource() {
         build: {
           write: false,
           minify: true,
-          lib: { entry: fileURLToPath(new URL('../src/app/worker.ts', import.meta.url)), formats: ['es'] },
+          // A classic script: library mode minifies only that format fully, and the worker exports nothing.
+          lib: {
+            entry: fileURLToPath(new URL('../src/app/worker.ts', import.meta.url)),
+            formats: ['iife'],
+            name: 'converterWorker',
+          },
         },
       });
       const outputs = Array.isArray(result) ? result : [result];

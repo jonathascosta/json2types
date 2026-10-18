@@ -384,3 +384,9 @@ footer {
   padding: 1.5rem 1rem;
   color: var(--ink-soft);
 }
+
+.hint {
+  margin: 0;
+  color: var(--warn);
+  font-size: 0.875rem;
+}

@@ -1,7 +1,8 @@
 /**
- * What the page remembers between visits, in this browser only (localStorage): the language and
- * the options under one key and, if asked to, the last JSON under another. Whatever is stored is checked field by field, so an old
- * or edited entry can never put the page in a state it doesn't expect.
+ * What the page remembers between visits, in this browser only (localStorage): the language
+ * and the options under one key and, if asked to, the last JSON under another. Whatever is stored
+ * is checked field by field, so an old or edited entry can never put the page in a state it
+ * doesn't expect.
  */
 import type { CSharpOptions } from '../generate/csharp';
 import type { TypeScriptOptions } from '../generate/typescript';

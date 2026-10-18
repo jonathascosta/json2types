@@ -114,6 +114,50 @@ describe('Converter', () => {
     expect(shown.map((s) => s.json)).toEqual(['new']);
   });
 
+  it('drops an older waiting request when it abandons a slow conversion', () => {
+    const first = new FakeWorker();
+    const second = new FakeWorker();
+    const { converter, shown, advance } = setUp([first, second]);
+    converter.request(request('A'));
+    advance(100);
+    converter.request(request('B'));
+    advance(RESTART_AFTER_MS);
+    converter.request(request('C'));
+    second.answer();
+    expect(second.sent.map((m) => m.request.json)).toEqual(['C']);
+    expect(shown.map((s) => s.json)).toEqual(['C']);
+  });
+
+  it('keeps waiting while a conversion is younger than the restart threshold', () => {
+    const worker = new FakeWorker();
+    const { converter, advance } = setUp([worker]);
+    converter.request(request('A'));
+    advance(RESTART_AFTER_MS - 1);
+    converter.request(request('B'));
+    expect(worker.terminated).toBe(false);
+    expect(worker.sent.map((m) => m.request.json)).toEqual(['A']);
+  });
+
+  it('never runs a request that crashed a worker on the page, even in a new worker', () => {
+    const first = new FakeWorker();
+    const second = new FakeWorker();
+    const third = new FakeWorker();
+    const { converter, shown } = setUp([first, second, third]);
+    converter.request(request('[1]'));
+    first.answer();
+    converter.request(request('[2]'));
+    first.crash();
+    converter.request(request('[3]'));
+    second.crash();
+    expect(shown.map((s) => [s.json, s.result.ok])).toEqual([
+      ['[1]', true],
+      ['[2]', false],
+      ['[3]', false],
+    ]);
+    converter.request(request('[4]'));
+    expect(third.sent.map((m) => m.request.json)).toEqual(['[4]']);
+  });
+
   it('converts on the page when there is no worker', () => {
     const { converter, shown } = setUp([null]);
     converter.request(request('[1]'));

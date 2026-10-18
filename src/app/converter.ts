@@ -14,8 +14,12 @@ export interface WorkerLike {
   addEventListener(type: 'error' | 'messageerror', listener: (event: Event) => void): void;
 }
 
-/** A conversion running longer than this is stopped when a newer one comes in. */
-export const RESTART_AFTER_MS = 300;
+/**
+ * A conversion running longer than this is stopped when a newer one comes in. Longer than the
+ * pause that starts a conversion of a large JSON (400 ms), so pausing while typing doesn't keep
+ * restarting one that would soon be done.
+ */
+export const RESTART_AFTER_MS = 1000;
 
 const CRASHED: ConvertResult = {
   ok: false,
@@ -25,8 +29,11 @@ const CRASHED: ConvertResult = {
 
 export class Converter {
   private worker: WorkerLike | null;
-  /** Whether the worker has answered once, so its errors are crashes, not a failure to load. */
-  private loaded = false;
+  /**
+   * Whether a worker has ever answered: then workers work here, and a worker's error is a crash on
+   * the request it was given, not a failure to load.
+   */
+  private workersWork = false;
   private nextId = 0;
   private running: { id: number; request: ConvertRequest; since: number } | null = null;
   private waiting: ConvertRequest | null = null;
@@ -49,9 +56,11 @@ export class Converter {
         this.waiting = request;
         return;
       }
-      // Too slow to wait for: drop it with its worker and start afresh.
+      // Too slow to wait for: drop it with its worker and start afresh. This request is the newest,
+      // so any older one waiting goes too.
       this.worker.terminate();
       this.running = null;
+      this.waiting = null;
       this.worker = this.start();
       if (!this.worker) {
         this.request(request);
@@ -69,10 +78,9 @@ export class Converter {
   private start(): WorkerLike | null {
     const worker = this.createWorker();
     if (!worker) return null;
-    this.loaded = false;
     worker.addEventListener('message', (event) => {
       if (worker !== this.worker) return;
-      this.loaded = true;
+      this.workersWork = true;
       this.finish(event.data.id, event.data.result);
     });
     const fail = () => {
@@ -98,8 +106,9 @@ export class Converter {
   }
 
   /**
-   * A worker that never answered couldn't load (an old browser, a blocked script): the page takes
-   * over. One that has answered before crashed on this request: report it, and use a new worker.
+   * Until a worker has answered, an error means workers can't load here (an old browser, a blocked
+   * script): the page takes over. After, it's a crash on the running request: that is reported and
+   * never run again (on the page it could freeze the tab), and a new worker takes the next one.
    */
   private failed(): void {
     const running = this.running;
@@ -107,7 +116,7 @@ export class Converter {
     this.running = null;
     this.waiting = null;
     this.worker?.terminate();
-    if (this.loaded) {
+    if (this.workersWork) {
       this.worker = this.start();
       if (next) this.request(next);
       else if (running) this.onResult(CRASHED, running.request);

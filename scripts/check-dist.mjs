@@ -1,7 +1,8 @@
 // Checks the built site still carries its protections, in case a Vite or plugin change drops them.
 // Every page: the Content Security Policy, exactly as in csp.mjs, right after the charset; no inline
 // scripts, styles or event handlers; the no-script stylesheet of the frame gate. The stylesheets:
-// the frame gate's hiding rule. Every text file: no data: URIs, which the policy doesn't allow.
+// the frame gate's hiding rule. Every text file: no data: URIs, which the policy doesn't allow. And
+// no worker served as a file of its own: it would run without the page's policy (worker-source.mjs).
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -28,6 +29,9 @@ export function findProblems(files) {
 
   for (const { name, text } of files) {
     if (dataUri.test(text)) problems.push(`${name}: contains a data: URI`);
+    if (/worker/i.test(name) && name.endsWith('.js')) {
+      problems.push(`${name}: a worker served as its own file runs without the page's CSP`);
+    }
   }
 
   for (const { name, text } of pages) {

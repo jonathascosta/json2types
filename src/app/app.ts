@@ -42,7 +42,7 @@ function createWorker(): WorkerLike | null {
       }) ?? null;
     // TypeScript's DOM types don't know Worker takes a TrustedScriptURL yet.
     const scriptUrl = workerPolicy ? (workerPolicy.createScriptURL(url) as unknown as string) : url;
-    return new Worker(scriptUrl, { type: 'module' });
+    return new Worker(scriptUrl);
   } catch {
     return null;
   }
@@ -96,6 +96,7 @@ export function startApp(): void {
   const errorMessage = byId('error-message', HTMLParagraphElement);
   const notes = byId('notes', HTMLElement);
   const notesList = byId('notes-list', HTMLUListElement);
+  const rememberNote = byId('remember-note', HTMLParagraphElement);
   const csharpOptions = byId('csharp-options', HTMLFieldSetElement);
   const typescriptOptions = byId('typescript-options', HTMLFieldSetElement);
   const fields = form.elements;
@@ -220,7 +221,9 @@ export function startApp(): void {
 
     if (!result.ok) {
       notes.hidden = true;
-      say(invalid ? `Error: ${result.message}` : '');
+      // Only that there is an error: the message itself, which changes as you type, is in the error
+      // box, which describes the JSON field.
+      say(invalid ? 'The JSON has an error.' : '');
       return;
     }
     notesList.replaceChildren(...result.diagnostics.map(note));
@@ -237,14 +240,16 @@ export function startApp(): void {
   function remember(): void {
     const settings = read();
     saveSettings(storage, settings);
-    if (settings.rememberInput && settings.input === savedInput) return;
-    if (!settings.rememberInput && savedInput === null) return;
-    if (saveInput(storage, settings)) {
-      savedInput = settings.rememberInput ? settings.input : null;
-    } else {
-      savedInput = null;
-      say('This JSON is too large to remember in this browser; the options are saved.');
-    }
+    // Nothing to do when the JSON kept is this one, or when none is kept nor to be kept.
+    const unchanged = settings.rememberInput
+      ? settings.input === savedInput
+      : savedInput === null && rememberNote.hidden;
+    if (unchanged) return;
+    // The note stays by the checkbox, which it describes, until the JSON fits or isn't kept.
+    const saved = saveInput(storage, settings);
+    savedInput = saved && settings.rememberInput ? settings.input : null;
+    rememberNote.hidden = saved;
+    rememberNote.textContent = saved ? '' : 'This JSON is too large to remember in this browser.';
   }
 
   /** Replaces the JSON as an edit, so Ctrl+Z brings back what was there. */
