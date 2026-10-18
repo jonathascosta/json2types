@@ -21,13 +21,16 @@ function securityPolicy(): Plugin {
   return {
     name: 'content-security-policy',
     apply: 'build',
-    transformIndexHtml: () => [
-      {
-        tag: 'meta',
-        attrs: { 'http-equiv': 'Content-Security-Policy', content: contentSecurityPolicy },
-        injectTo: 'head-prepend',
-      },
-    ],
+    // Placed right after the charset, which by convention comes first. Fails the build rather than
+    // ship a page without the policy.
+    transformIndexHtml: (html) => {
+      const charset = '<meta charset="utf-8" />';
+      if (!html.includes(charset)) throw new Error('index.html needs <meta charset="utf-8" /> for the CSP');
+      return html.replace(
+        charset,
+        `${charset}\n    <meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicy}" />`,
+      );
+    },
   };
 }
 

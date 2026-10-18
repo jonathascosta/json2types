@@ -31,9 +31,17 @@ body {
     sans-serif;
 }
 
-/* Hidden until the script confirms the page isn't framed by another site (see main.ts). */
+/* Hidden until the script confirms the page isn't framed by another site (see main.ts). If the
+   script never runs (blocked, failed to load), the content appears anyway after three seconds. */
 body:not(.unframed) > main {
   visibility: hidden;
+  animation: reveal 0s 3s forwards;
+}
+
+@keyframes reveal {
+  to {
+    visibility: visible;
+  }
 }
 
 main {
