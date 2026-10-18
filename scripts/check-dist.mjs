@@ -68,7 +68,7 @@ const PAGES = [
 ];
 
 /**
- * The site's own pages: each one there, with its header and footer and no marker left unfilled;
+ * The site's own pages and the files crawlers read (robots.txt, sitemap.xml): each page there, with its header and footer and no marker left unfilled;
  * the converter on the pages that have it; each indexable page canonical and in the sitemap, the
  * 404 page kept out of search.
  * @param {{ name: string, text: string }[]} files
@@ -78,6 +78,17 @@ export function findMissingPages(files) {
   const problems = [];
   const sitemap = files.find((file) => file.name === 'sitemap.xml')?.text ?? '';
   if (sitemap === '') problems.push('dist/ has no sitemap.xml');
+  const robots = files.find((file) => file.name === 'robots.txt')?.text;
+  if (robots === undefined) problems.push('dist/ has no robots.txt');
+  else {
+    const lines = robots.split('\n').filter((line) => line.trim() !== '' && !line.startsWith('#'));
+    if (!lines.every((line) => /^(User-agent|Allow|Disallow|Sitemap):\s*\S/.test(line))) {
+      problems.push('robots.txt: has a line crawlers would not understand');
+    }
+    if (!lines.includes('Sitemap: https://json2types.jonathas.net/sitemap.xml')) {
+      problems.push("robots.txt: doesn't point to the sitemap");
+    }
+  }
   for (const { name, tool, url } of PAGES) {
     const text = files.find((file) => file.name === name)?.text;
     if (text === undefined) {

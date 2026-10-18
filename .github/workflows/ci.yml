@@ -70,10 +70,54 @@ jobs:
         with:
           path: dist
 
+  # The built site in a real browser: end-to-end tests (Playwright), accessibility checks (axe) and
+  # Lighthouse scores, each against `vite preview` of the build, as GitHub Pages will serve it.
+  quality:
+    name: End-to-end, accessibility and Lighthouse
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Build
+        run: npm run build
+
+      - name: End-to-end and accessibility tests
+        run: npm run test:e2e
+
+      - name: Lighthouse
+        run: npm run lighthouse
+
+      - name: Upload reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: quality-reports
+          path: |
+            playwright-report/
+            test-results/
+            lighthouse-report/
+          retention-days: 7
+
   deploy:
     name: Deploy to GitHub Pages
     if: github.ref == 'refs/heads/main'
-    needs: check
+    needs: [check, quality]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

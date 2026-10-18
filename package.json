@@ -10,6 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run --project unit",
     "test:dotnet": "vitest run --project dotnet",
+    "test:e2e": "playwright test",
+    "lighthouse": "node scripts/lighthouse.mjs",
     "check": "tsc -b",
     "lint": "eslint . && prettier --check .",
     "check:dist": "node scripts/check-dist.mjs"
@@ -18,13 +20,19 @@
     "node": "^22.13.0 || ^24.0.0 || >=26.0.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.64.0",
     "@types/node": "^24.19.2",
     "eslint": "^10.13.0",
+    "lighthouse": "^13.5.0",
     "prettier": "^3.9.10",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.71.2",
     "vite": "^8.3.4",
     "vitest": "^5.0.5"
+  },
+  "overrides": {
+    "playwright-core": "$@playwright/test"
   }
 }

@@ -40,6 +40,8 @@ npm run lint     # ESLint and Prettier
 npm run build    # type-check and build to dist/
 npm run preview  # serve dist/, with the security policy (no trailing-slash redirect, unlike Pages)
 npm run check:dist  # check the built page keeps its security policy
+npm run test:e2e    # end-to-end and accessibility tests in Chromium, against the build
+npm run lighthouse  # Lighthouse on every page, phone and desktop: 95 or more in each category
 ```
 
 Adding a page means adding it to `build.rolldownOptions.input` in `vite.config.ts`, to `PAGES` in
@@ -48,8 +50,9 @@ Adding a page means adding it to `build.rolldownOptions.input` in `vite.config.t
 
 ## Deployment
 
-Every pull request is linted, tested and built by GitHub Actions; every push to `main` is also
-deployed to GitHub Pages. One-time setup, in the repository's **Settings → Pages**: set the source to
+Every pull request is linted, tested and built by GitHub Actions, and the build is checked in
+Chromium (end-to-end tests, axe and Lighthouse); every push to `main` that passes is also deployed
+to GitHub Pages. One-time setup, in the repository's **Settings → Pages**: set the source to
 **GitHub Actions**, the custom domain to `json2types.jonathas.net`, and turn on **Enforce HTTPS**.
 The DNS record is a CNAME from `json2types` to `jonathascosta.github.io`. With Actions deployments
 the domain in Settings is the one that counts; `public/CNAME` only records it in the repository.
