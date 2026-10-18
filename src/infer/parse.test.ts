@@ -79,7 +79,7 @@ describe('parseJson', () => {
   });
 
   it('accepts a byte order mark and surrounding whitespace', () => {
-    expect(parseJson('﻿ \n [ ] \r\n')).toEqual({ type: 'array', items: [] });
+    expect(parseJson('\uFEFF \n [ ] \r\n')).toEqual({ type: 'array', items: [] });
   });
 
   it('keeps repeated keys, in order, for the caller to decide', () => {

@@ -17,7 +17,12 @@ describe('typeName', () => {
     ['café', 'Café'],
     ['x²', 'X'],
     ['½price', 'Price'],
-    ['Ⅻ', 'Ⅻ'],
+    ['Ⅻ', 'Item'],
+    ['new\u0C5C\uA7CBname', 'NewName'],
+    ['\u0928\u093E\u092E', 'Item'],
+    ['日本語', '日本語'],
+    ['имя', 'Имя'],
+    ['όνομα', 'Όνομα'],
     ['HOME_ADDRESS', 'HomeAddress'],
     ['USER_ID', 'UserID'],
     ['b\u20ddc', 'BC'],
@@ -57,6 +62,9 @@ describe('typeName', () => {
       '𠀀x',
       '𝑥y',
       '\u0301abc',
+      'x\u0C5C',
+      '\uA7CB',
+      'ไทย',
     ];
     for (const key of keys) {
       const name = typeName(key);
@@ -66,6 +74,11 @@ describe('typeName', () => {
       expect(name).toMatch(/^\p{ID_Start}\p{ID_Continue}*$/u);
       // C# reads identifiers one UTF-16 unit at a time: no surrogate pairs (CS1056).
       expect(name).not.toMatch(/[\u{10000}-\u{10FFFF}]/u);
+      // Only characters every compiler's Unicode tables know.
+      expect(name).toMatch(
+        // eslint-disable-next-line no-misleading-character-class -- ranges of single code points
+        /^[0-9A-Za-z\u00C0-\u024F\u0300-\u036F\u0386-\u03CE\u0400-\u045F\u05D0-\u05EA\u0621-\u0652\u0E01-\u0E4E\u3041-\u3094\u30A1-\u30FA\u4E00-\u9FA5\uAC00-\uD7A3]+$/u,
+      );
     }
   });
 });

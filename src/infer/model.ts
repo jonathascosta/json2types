@@ -17,16 +17,17 @@ export type TypeRef =
   | { readonly kind: 'guid' }
   /**
    * Whole numbers; `bits` is the smallest signed size that holds every one seen, or 'big' past 128.
-   * `unsafe` is set when some are beyond ±2^53, where a double (a JavaScript number) skips some.
+   * On every kind of number, `unsafe` is set when some value is beyond ±2^53, where a double (a
+   * JavaScript number) no longer holds every whole number, so it may lose digits.
    */
   | { readonly kind: 'integer'; readonly bits: 32 | 64 | 128 | 'big'; readonly unsafe?: true }
   /**
    * Numbers with a fraction or an exponent, all within an exact decimal's range (±7.9×10²⁸, down to
    * 1e-28). Only the range is checked: digits beyond a decimal's 28–29 are rounded.
    */
-  | { readonly kind: 'decimal' }
+  | { readonly kind: 'decimal'; readonly unsafe?: true }
   /** Numbers with a fraction or an exponent, some beyond an exact decimal's range: floating point. */
-  | { readonly kind: 'float' }
+  | { readonly kind: 'float'; readonly unsafe?: true }
   | { readonly kind: 'boolean' }
   /** Nothing to infer from (only nulls, an empty array) or values of different kinds. */
   | { readonly kind: 'any' }

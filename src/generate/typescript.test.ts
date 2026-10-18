@@ -8,6 +8,9 @@ function typescript(json: string, options: TypeScriptOptions = {}, rootName?: st
 
 const lines = (...text: string[]) => text.join('\n') + '\n';
 
+const UNSAFE =
+  "Some numbers here are beyond ±2^53, where JSON.parse may lose digits: to keep them exact, read them as strings or with a reviver's context.source.";
+
 const SAMPLE =
   '[{"id": 7, "first-name": "Ana", "tags": ["a", null], "address": {"city": "Porto"}}, {"id": 8, "first-name": null, "tags": []}]';
 
@@ -81,6 +84,7 @@ describe('generateTypeScript', () => {
         '  i: number;',
         '  l: number;',
         '  d: number;',
+        `  /** ${UNSAFE} */`,
         '  f: number;',
         '  b: boolean;',
         '  any: unknown[];',
@@ -91,21 +95,26 @@ describe('generateTypeScript', () => {
     );
   });
 
-  it('says where integers go past ±2^53, which JSON.parse rounds', () => {
-    const comment =
-      '/** Integers here go past ±2^53 (Number.MAX_SAFE_INTEGER), so JSON.parse rounds some of them. */';
-    expect(typescript('{"safe": 9007199254740991, "big": [1, 9007199254740993], "huge": 1e5}')).toBe(
+  it('says where numbers go past ±2^53, where JSON.parse may lose digits', () => {
+    const comment = `/** ${UNSAFE} */`;
+    expect(
+      typescript(
+        '{"safe": 9007199254740991, "big": [1, 9007199254740993], "mixed": [0.5, 1e20], "small": 1e5}',
+      ),
+    ).toBe(
       lines(
         'export interface Root {',
         '  safe: number;',
         `  ${comment}`,
         '  big: number[];',
-        '  huge: number;',
+        `  ${comment}`,
+        '  mixed: number[];',
+        '  small: number;',
         '}',
       ),
     );
     expect(typescript('[1, -9007199254740993]')).toBe(
-      lines(comment, '// There are no types to declare: parse the JSON as number[].'),
+      lines(`// ${UNSAFE}`, '// There are no types to declare: parse the JSON as number[].'),
     );
   });
 
@@ -126,9 +135,9 @@ describe('generateTypeScript', () => {
     );
   });
 
-  it('keeps JSON names, quoting those that are not identifiers', () => {
+  it('keeps JSON names, quoting those that are not plain ASCII identifiers', () => {
     const code = typescript(
-      '{"class": 1, "$id": 2, "_x": 3, "a-b": 4, "1": 5, "𝑥": 6, "名前": 7, "": 8, "a b": 9}',
+      '{"class": 1, "$id": 2, "_x": 3, "a-b": 4, "1": 5, "\\ud835\\udc65": 6, "\\u540d": 7, "": 8, "a b": 9}',
     );
     expect(code).toBe(
       lines(
@@ -138,11 +147,30 @@ describe('generateTypeScript', () => {
         '  _x: number;',
         '  "a-b": number;',
         '  "1": number;',
-        '  𝑥: number;',
-        '  名前: number;',
+        '  "\u{1D465}": number;',
+        '  "\u540D": number;',
         '  "": number;',
         '  "a b": number;',
         '}',
+      ),
+    );
+  });
+
+  it('writes full declarations with every option off its default', () => {
+    expect(
+      typescript('{"a": [1], "b": {"c": null}}', { declaration: 'type', export: false, readonly: true }),
+    ).toBe(
+      lines(
+        'type Root = {',
+        '  readonly a: readonly number[];',
+        '  readonly b: B;',
+        '};',
+        '',
+        'type B = {',
+        '  readonly c: unknown;',
+        '};',
+        '',
+        'export {};',
       ),
     );
   });
@@ -153,16 +181,24 @@ describe('propertyName', () => {
     ['name', 'name'],
     ['delete', 'delete'],
     ['__proto__', '__proto__'],
-    ['é', 'é'],
-    ['a‍b', 'a‍b'],
+    ['A1_$', 'A1_$'],
+    // Letters beyond ASCII are quoted: TypeScript's Unicode tables can be older than the browser's.
+    ['\u00e9', '"\u00e9"'],
+    ['\u2C64', '"\u2C64"'],
+    ['\u{1D465}', '"\u{1D465}"'],
     ['2fa', '"2fa"'],
     ['a.b', '"a.b"'],
     ['say "hi"', '"say \\"hi\\""'],
     ['back\\slash', '"back\\\\slash"'],
     ['tab\there', '"tab\\there"'],
-    [' ', '"\\u2028"'],
-    ['a‮b', '"a\\u202Eb"'],
-    ['﻿', '"\\uFEFF"'],
+    // What can't be seen is escaped, both halves of a surrogate pair included.
+    ['a\u200Db', '"a\\u200db"'],
+    ['\u2028', '"\\u2028"'],
+    ['a\u202Eb', '"a\\u202eb"'],
+    ['\uFEFF', '"\\ufeff"'],
+    ['a\u00A0b', '"a\\u00a0b"'],
+    ['\u3164', '"\\u3164"'],
+    ['a\u{E0041}b', '"a\\udb40\\udc41b"'],
     ['\uD800', '"\\ud800"'],
   ])('%j → %s', (name, expected) => {
     expect(propertyName(name)).toBe(expected);

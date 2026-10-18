@@ -165,10 +165,23 @@ function capitalise(word: string): string {
 }
 
 /**
+ * Letters and marks every C# and TypeScript compiler knows, whatever its Unicode version: ASCII
+ * letters and digits, and long-established blocks (Latin with accents, Greek, Cyrillic, Hebrew,
+ * Arabic, Thai, kana, the core CJK ideographs, Hangul syllables), all in Unicode since 1.1. A letter
+ * added since (U+0C5C, U+A7CB) is valid in this browser but may be an error for the compiler
+ * (CS1056, TS1127), so it separates words instead.
+ */
+const STABLE =
+  // The ranges are of single code points; combining marks among them are meant.
+  // eslint-disable-next-line no-misleading-character-class
+  /[^0-9A-Za-z\u00C0-\u024F\u0300-\u036F\u0386-\u03CE\u0400-\u045F\u05D0-\u05EA\u0621-\u0652\u0E01-\u0E4E\u3041-\u3094\u30A1-\u30FA\u4E00-\u9FA5\uAC00-\uD7A3]/gu;
+
+/**
  * Turns any JSON key into PascalCase words: "home address" → HomeAddress, "HOME_ADDRESS" →
- * HomeAddress, "2fa" → Item2fa. Words are runs of characters valid in identifiers in both languages (letters, Mn and Mc marks,
- * decimal digits, letter numbers, all within ECMAScript's ID_Continue);
- * everything else separates them, so the result is a valid identifier in C# and TypeScript.
+ * HomeAddress, "2fa" → Item2fa. Words are runs of characters valid in identifiers in both
+ * languages (letters, Mn and Mc marks, decimal digits, all within ECMAScript's ID_Continue) and in
+ * the STABLE blocks; everything else separates them, so the result is a valid identifier in C# and
+ * TypeScript for any compiler.
  */
 export function pascalCase(key: string): string {
   // Two passes instead of a callback per character: outside the C# classes, then outside ID_Continue.
@@ -178,7 +191,8 @@ export function pascalCase(key: string): string {
     .normalize('NFC')
     .replace(/[\u{10000}-\u{10FFFF}]/gu, ' ')
     .replace(/[^\p{L}\p{Mn}\p{Mc}\p{Nd}\p{Nl}]/gu, ' ')
-    .replace(/\P{ID_Continue}/gu, ' ');
+    .replace(/\P{ID_Continue}/gu, ' ')
+    .replace(STABLE, ' ');
   const words = separated
     .replace(/([\p{Ll}\p{Nd}])(\p{Lu})/gu, '$1 $2')
     .split(' ')

@@ -5,6 +5,7 @@
  * or later for DateOnly.
  */
 import type { Model, ObjectDeclaration, Property, PropertyType, TypeRef } from '../infer';
+import { unicodeEscape } from './escape';
 
 export interface CSharpOptions {
   /** `record` gives `{ get; init; }` properties, `class` gives `{ get; set; }`. Default: class. */
@@ -237,11 +238,8 @@ export function namespaceName(input: string): string {
  */
 export function stringLiteral(value: string): string {
   const escaped = value.replace(
-    /["\\]|[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/gu,
-    (c) =>
-      c === '"' || c === '\\'
-        ? `\\${c}`
-        : `\\u${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`,
+    /["\\]|(?! )[\p{Cc}\p{Cf}\p{Z}\u115F\u1160\u3164\uFFA0]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/gu,
+    (c) => (c === '"' || c === '\\' ? `\\${c}` : unicodeEscape(c, true)),
   );
   return `"${escaped}"`;
 }

@@ -281,11 +281,20 @@ describe('stringLiteral', () => {
   it('escapes quotes, backslashes and characters that would break or hide in the source', () => {
     expect(stringLiteral('plain é 名 😀')).toBe('"plain é 名 😀"');
     expect(stringLiteral('a"b\\c')).toBe('"a\\"b\\\\c"');
-    expect(stringLiteral('\n\r\t\0\u007f\u0085  ')).toBe(
+    expect(stringLiteral('\n\r\t\0\u007f\u0085\u2028\u2029')).toBe(
       '"\\u000A\\u000D\\u0009\\u0000\\u007F\\u0085\\u2028\\u2029"',
     );
     // Format characters, such as bidirectional overrides, and a byte order mark.
-    expect(stringLiteral('a‮b​c﻿')).toBe('"a\\u202Eb\\u200Bc\\uFEFF"');
+    expect(stringLiteral('a\u202Eb\u200Bc\uFEFF')).toBe('"a\\u202Eb\\u200Bc\\uFEFF"');
+  });
+
+  it('escapes both halves of an invisible character beyond the Basic Multilingual Plane', () => {
+    // A tag character, as in the subdivision flag emoji.
+    expect(stringLiteral('a\u{E0067}b')).toBe('"a\\uDB40\\uDC67b"');
+  });
+
+  it('escapes spaces other than the plain one, and Hangul fillers', () => {
+    expect(stringLiteral('a b\u00A0c\u3000d\u3164')).toBe('"a b\\u00A0c\\u3000d\\u3164"');
   });
 
   it('escapes lone surrogates and keeps pairs', () => {

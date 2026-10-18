@@ -36,7 +36,7 @@ export const SAMPLES: Record<string, string> = {
     名前: 'name',
     'he said "hi"': 'quote',
     'back\\slash': 'b',
-    'line break': 'l',
+    'line\u2028break': 'l',
     '': 'empty',
     '😀': 'emoji',
     ToString: 'inherited',
@@ -83,9 +83,13 @@ export const SAMPLES: Record<string, string> = {
     '𝑥': 'astral',
     'a\u202Eb': 'bidi',
     'tab\there': 'tab',
+    'flag\u{E0067}\u{E0062}': 'tag characters',
+    'new\u0C5C\uA7CB': 'letters newer than some Unicode tables',
+    'nb\u00A0sp': 'no-break space',
   }),
   // As text: in a JavaScript object literal __proto__ would set the prototype instead.
   proto: '{"__proto__": {"a": 1}, "b": 2}',
+  empty: JSON.stringify({ meta: {}, list: [{}, {}], nested: { inner: {} } }),
   text: '"just a string"',
   nothing: 'null',
   rootList: '[[{"x": 1}], []]',
