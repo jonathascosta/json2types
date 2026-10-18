@@ -15,8 +15,9 @@ of the owner's.
 2. **Develop.**
 3. **Test.** If anything goes wrong, go back to step 1: a new development round, timed again.
 4. **Review** with two independent agents:
-   - one that knows the development context (the task, the decisions taken, the conversation);
-   - one with no context of the task at all, only expertise in the technology used, reviewing
+   - **Atlas** knows the business and the task: the development context, the decisions taken, the
+     conversation;
+   - **Spock** knows nothing of the business or the task, only the technology used, and reviews
      the diff on its own.
 
    Report what they find in this table:

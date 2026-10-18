@@ -32,8 +32,8 @@ body {
 }
 
 /* Hidden until the script confirms the page isn't framed by another site (see main.ts). If the
-   script never runs (blocked, failed to load), the content appears anyway after three seconds. */
-body:not(.unframed) > main {
+   script never runs (blocked, failed to load), the page appears anyway after three seconds. */
+body:not(.frame-checked) > * {
   visibility: hidden;
   animation: reveal 0s 3s forwards;
 }

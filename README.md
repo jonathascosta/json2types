@@ -10,14 +10,15 @@ and [milestones](https://github.com/jonathascosta/json2types/milestones): one mi
 
 ## Development
 
-Requires Node.js 22 (22.13 or later), 24, or 26 and later. CI runs on Node 24 (`.nvmrc`).
+Requires Node.js 22 (22.13 or later), 24, or 26 and later. CI tests on Node 22, 24 and 26, and deploys from 24 (`.nvmrc`).
 
 ```sh
 npm ci           # install
-npm run dev      # local server with live reload
+npm run dev      # local server with live reload (without the security policy)
 npm test         # unit tests
 npm run lint     # ESLint and Prettier
 npm run build    # type-check and build to dist/
+npm run preview  # serve dist/, with the security policy
 npm run check:dist  # check the built page keeps its security policy
 ```
 
