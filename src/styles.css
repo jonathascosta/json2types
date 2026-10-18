@@ -31,6 +31,11 @@ body {
     sans-serif;
 }
 
+/* Hidden until the script confirms the page isn't framed by another site (see main.ts). */
+body:not(.unframed) > main {
+  visibility: hidden;
+}
+
 main {
   flex: 1;
   width: min(100% - 2rem, 40rem);
