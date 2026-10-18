@@ -89,6 +89,7 @@ const RESERVED = new Set([
   'Map',
   'Math',
   'Memory',
+  'Newtonsoft',
   'Node',
   'NonNullable',
   'Nullable',

@@ -26,6 +26,16 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(version),
   },
   test: {
-    include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs'],
+    projects: [
+      {
+        extends: true,
+        test: { name: 'unit', include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs'] },
+      },
+      {
+        // Needs the .NET SDK and takes a while: `npm run test:dotnet`.
+        extends: true,
+        test: { name: 'dotnet', include: ['scripts/**/*.dotnet.test.ts'], testTimeout: 600_000 },
+      },
+    ],
   },
 });

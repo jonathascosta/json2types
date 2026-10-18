@@ -16,6 +16,7 @@ Requires Node.js 22 (22.13 or later), 24, or 26 and later. CI tests on Node 22, 
 npm ci           # install
 npm run dev      # local server with live reload (without the security policy)
 npm test         # unit tests
+npm run test:dotnet  # compile the generated C# with the .NET 10 SDK and read samples back
 npm run lint     # ESLint and Prettier
 npm run build    # type-check and build to dist/
 npm run preview  # serve dist/, with the security policy
