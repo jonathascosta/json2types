@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { defineConfig, type Plugin } from 'vite';
 import { injectPolicy } from './scripts/csp.mjs';
+import { pageParts } from './scripts/page-parts.mjs';
 import { workerSource } from './scripts/worker-source.mjs';
 
 const { version } = JSON.parse(readFileSync(new URL('package.json', import.meta.url), 'utf8')) as {
@@ -15,13 +16,24 @@ function securityPolicy(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [securityPolicy(), workerSource()],
+  // Like GitHub Pages: each page is its own file, and an unknown path is no page (not the home one).
+  appType: 'mpa',
+  plugins: [pageParts(), securityPolicy(), workerSource()],
   build: {
     // Keep every asset a file of its own: the policy above has no data: sources.
     assetsInlineLimit: 0,
     // The polyfill loads modules with fetch(), which connect-src 'none' blocks; every browser the
     // site supports has native modulepreload.
     modulePreload: { polyfill: false },
+    // GitHub Pages serves real files only: each page is its own HTML file.
+    rolldownOptions: {
+      input: {
+        home: 'index.html',
+        csharp: 'csharp/index.html',
+        typescript: 'typescript/index.html',
+        notFound: '404.html',
+      },
+    },
   },
   define: {
     __APP_VERSION__: JSON.stringify(version),

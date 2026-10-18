@@ -11,6 +11,10 @@ The TypeScript needs TypeScript 3.4 or later (`readonly` arrays, `unknown`).
 
 ## How it works
 
+Three pages share one converter: `/` with a language switch, and `/csharp/` and `/typescript/`, each
+fixed to its language with its own guide. The parts they share (header, converter, footer) are
+written into each page at build time from `scripts/page-parts.mjs`.
+
 The page parses and converts the JSON in a Web Worker, so a large paste doesn't freeze it, and
 writes the result into the page as text. The worker is bundled into the page's script and started
 from a `blob:` URL, so the page's Content Security Policy (`scripts/csp.mjs`) covers it too: no
@@ -34,9 +38,13 @@ npm test         # unit tests, and the generated TypeScript type-checked against
 npm run test:dotnet  # compile the generated C# with the .NET 10 SDK and read samples back
 npm run lint     # ESLint and Prettier
 npm run build    # type-check and build to dist/
-npm run preview  # serve dist/, with the security policy
+npm run preview  # serve dist/, with the security policy (no trailing-slash redirect, unlike Pages)
 npm run check:dist  # check the built page keeps its security policy
 ```
+
+Adding a page means adding it to `build.rolldownOptions.input` in `vite.config.ts`, to `PAGES` in
+`scripts/check-dist.mjs` and to `public/sitemap.xml`, with a social image from
+`design/render-images.mjs`.
 
 ## Deployment
 

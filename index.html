@@ -6,138 +6,89 @@
     <title>json2types · JSON to C# and TypeScript types</title>
     <meta
       name="description"
-      content="Paste JSON, get C# and TypeScript types. Runs entirely in your browser: nothing you paste is uploaded."
+      content="Paste a JSON sample and get C# classes or records and TypeScript interfaces, as you type. Runs entirely in your browser: nothing you paste is uploaded."
     />
     <link rel="canonical" href="https://json2types.jonathas.net/" />
     <meta name="author" content="Jonathas Costa" />
     <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#faf9f6" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f0f0e" media="(prefers-color-scheme: dark)" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="json2types" />
+    <meta property="og:title" content="json2types · JSON to C# and TypeScript types" />
+    <meta
+      property="og:description"
+      content="Paste a JSON sample and get C# classes or records and TypeScript interfaces, as you type. Runs entirely in your browser: nothing you paste is uploaded."
+    />
+    <meta property="og:url" content="https://json2types.jonathas.net/" />
+    <meta property="og:image" content="https://json2types.jonathas.net/og/home.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="json2types: JSON on the left, the C# and TypeScript types it gives on the right"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="stylesheet" href="/src/styles.css" />
     <noscript><link rel="stylesheet" href="/noscript.css" /></noscript>
   </head>
   <body>
-    <main>
-      <header class="intro">
+    <!-- site-header -->
+    <main id="main">
+      <div class="intro">
         <h1>json2types</h1>
         <p class="lede">Paste JSON, get C# and TypeScript types.</p>
-        <p class="privacy">Everything runs in your browser: nothing you paste is uploaded.</p>
-        <noscript><p class="error">The converter needs JavaScript, which is turned off.</p></noscript>
-      </header>
+      </div>
 
-      <form class="tool" id="tool" aria-label="Converter">
-        <div class="settings">
-          <fieldset class="segmented">
-            <legend>Language</legend>
-            <label><input type="radio" name="language" value="csharp" checked /> C#</label>
-            <label><input type="radio" name="language" value="typescript" /> TypeScript</label>
-          </fieldset>
+      <!-- tool:any -->
 
-          <label class="field">
-            Root type name
-            <input name="rootName" type="text" maxlength="200" autocomplete="off" spellcheck="false" />
-          </label>
+      <article class="guide">
+        <h2>What it does</h2>
+        <p>
+          json2types reads a JSON sample, works out the types it implies and writes them as C# classes or
+          records, or as TypeScript interfaces or types. The code updates as you type, and every option shows
+          its effect at once.
+        </p>
+        <p>
+          It looks at every value, not just the first: the objects of an array are merged into one type, a
+          property missing from some of them becomes optional, one that is <code>null</code> in some becomes
+          nullable, and integers mixed with fractions become decimals. In C#, dates, date-times and GUIDs get
+          their own types when every value in a place is one.
+        </p>
 
-          <fieldset class="options" id="csharp-options">
-            <legend>C# options</legend>
-            <fieldset class="segmented">
-              <legend>Declare</legend>
-              <label><input type="radio" name="csharpKind" value="class" checked /> Classes</label>
-              <label><input type="radio" name="csharpKind" value="record" /> Records</label>
-            </fieldset>
-            <fieldset class="segmented">
-              <legend>Collections</legend>
-              <label><input type="radio" name="csharpCollection" value="list" checked /> List&lt;T&gt;</label>
-              <label><input type="radio" name="csharpCollection" value="array" /> T[]</label>
-            </fieldset>
-            <label class="field">
-              Attributes
-              <select name="csharpAttributes">
-                <option value="systemTextJson">System.Text.Json</option>
-                <option value="newtonsoft">Newtonsoft.Json</option>
-                <option value="none">None</option>
-              </select>
-            </label>
-            <label class="field">
-              Namespace (optional)
-              <input
-                name="csharpNamespace"
-                type="text"
-                maxlength="200"
-                autocomplete="off"
-                spellcheck="false"
-              />
-            </label>
-            <label class="check"
-              ><input type="checkbox" name="csharpNullable" checked /> Nullable reference types</label
-            >
-          </fieldset>
-
-          <fieldset class="options" id="typescript-options" hidden>
-            <legend>TypeScript options</legend>
-            <fieldset class="segmented">
-              <legend>Declare</legend>
-              <label><input type="radio" name="tsDeclaration" value="interface" checked /> Interfaces</label>
-              <label><input type="radio" name="tsDeclaration" value="type" /> Types</label>
-            </fieldset>
-            <label class="check"><input type="checkbox" name="tsExport" checked /> Export</label>
-            <label class="check"><input type="checkbox" name="tsReadonly" /> Read-only</label>
-          </fieldset>
+        <div class="cards">
+          <a class="card" href="/csharp/">
+            <h3>JSON to C#</h3>
+            <p>Classes or records, System.Text.Json or Newtonsoft attributes, nullable reference types.</p>
+          </a>
+          <a class="card" href="/typescript/">
+            <h3>JSON to TypeScript</h3>
+            <p>Interfaces or type aliases, optional and nullable properties, read-only if you like.</p>
+          </a>
         </div>
 
-        <div class="panes">
-          <section class="pane">
-            <div class="pane-head">
-              <h2 id="input-label"><label for="input">JSON</label></h2>
-              <button type="button" id="sample">Try a sample</button>
-              <button type="button" id="clear">Clear</button>
-            </div>
-            <textarea
-              id="input"
-              name="input"
-              spellcheck="false"
-              autocapitalize="off"
-              autocomplete="off"
-              wrap="off"
-              aria-describedby="error-message"
-              placeholder='{"paste": "your JSON here"}'
-            ></textarea>
-            <div class="error" id="error" hidden>
-              <p id="error-message"></p>
-              <button type="button" id="show-error">Show in the JSON</button>
-            </div>
-            <label class="check"
-              ><input type="checkbox" name="rememberInput" aria-describedby="remember-note" /> Remember my
-              JSON in this browser</label
-            >
-            <p class="hint" id="remember-note" hidden></p>
-          </section>
-
-          <section class="pane">
-            <div class="pane-head">
-              <h2 id="output-label">C# code</h2>
-              <button type="button" id="copy" disabled>Copy</button>
-              <button type="button" id="download" disabled>Download</button>
-            </div>
-            <pre
-              id="output"
-              role="region"
-              tabindex="0"
-              aria-labelledby="output-label"
-            ><code id="code"></code></pre>
-          </section>
-        </div>
-
-        <p class="status" id="status" role="status"></p>
-        <section class="notes" id="notes" aria-labelledby="notes-label" hidden>
-          <h2 id="notes-label">Notes</h2>
-          <ul id="notes-list"></ul>
-        </section>
-      </form>
+        <h2>Questions</h2>
+        <h3>Is my JSON sent anywhere?</h3>
+        <p>
+          No. Parsing and conversion happen in your browser, in a background worker, and the page's security
+          policy blocks every network request from its scripts, so nothing you paste can leave the page. The
+          options you pick are remembered in this browser; the JSON only if you tick "Remember my JSON".
+        </p>
+        <h3>How large a JSON can it take?</h3>
+        <p>
+          Megabytes. A 1 MB sample converts in about half a second on a laptop, and the page stays responsive
+          meanwhile, since the work runs off its main thread.
+        </p>
+        <h3>What if my JSON has an error?</h3>
+        <p>
+          The error is shown with its line and column, and "Show in the JSON" selects the spot. The last good
+          code stays on screen, marked out of date, until the JSON is valid again.
+        </p>
+      </article>
     </main>
-    <footer>
-      <a href="https://www.jonathas.net">jonathas.net</a>
-      <span class="version" id="version"></span>
-    </footer>
+    <!-- site-footer -->
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

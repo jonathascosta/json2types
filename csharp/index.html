@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JSON to C# classes and records · json2types</title>
+    <meta
+      name="description"
+      content="Convert JSON to C# classes or records with System.Text.Json or Newtonsoft attributes and nullable reference types, in your browser. Nothing you paste is uploaded."
+    />
+    <link rel="canonical" href="https://json2types.jonathas.net/csharp/" />
+    <meta name="author" content="Jonathas Costa" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#faf9f6" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f0f0e" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="json2types" />
+    <meta property="og:title" content="JSON to C# classes and records · json2types" />
+    <meta
+      property="og:description"
+      content="Convert JSON to C# classes or records with System.Text.Json or Newtonsoft attributes and nullable reference types, in your browser. Nothing you paste is uploaded."
+    />
+    <meta property="og:url" content="https://json2types.jonathas.net/csharp/" />
+    <meta property="og:image" content="https://json2types.jonathas.net/og/csharp.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="JSON on the left, the C# class json2types writes for it on the right"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <noscript><link rel="stylesheet" href="/noscript.css" /></noscript>
+  </head>
+  <body>
+    <!-- site-header -->
+    <main id="main">
+      <div class="intro">
+        <h1>JSON to C#</h1>
+        <p class="lede">Paste JSON, get C# classes or records.</p>
+      </div>
+
+      <!-- tool:csharp -->
+
+      <article class="guide">
+        <h2>The options</h2>
+        <dl>
+          <dt>Classes or records</dt>
+          <dd>
+            Classes get <code>{ get; set; }</code> properties; records get <code>{ get; init; }</code>, so
+            values are set once, when the JSON is read.
+          </dd>
+          <dt>Collections</dt>
+          <dd>Arrays become <code>List&lt;T&gt;</code> or <code>T[]</code>.</dd>
+          <dt>Attributes</dt>
+          <dd>
+            When a property's C# name differs from its JSON name (<code>first_name</code> becomes
+            <code>FirstName</code>), it gets <code>[JsonPropertyName("first_name")]</code> for
+            System.Text.Json or <code>[JsonProperty("first_name")]</code> for Newtonsoft.Json, so it reads and
+            writes the original names. Choose None if you configure a naming policy instead.
+          </dd>
+          <dt>Namespace</dt>
+          <dd>A file-scoped namespace for the types, such as <code>MyApp.Models</code>.</dd>
+          <dt>Nullable reference types</dt>
+          <dd>
+            On, the file starts with <code>#nullable enable</code>: references that can be null are marked
+            <code>?</code>, and the others start out empty (an empty string, collection or object), so none is
+            left null. Off, it starts with <code>#nullable disable</code>.
+          </dd>
+          <dt>Root type name</dt>
+          <dd>The name of the outermost type, or of each item when the JSON is an array.</dd>
+        </dl>
+
+        <h2>How values become types</h2>
+        <h3>Nulls and missing properties</h3>
+        <p>
+          A property that is <code>null</code> in some objects, or missing from some, becomes nullable:
+          <code>int?</code>, and with nullable reference types on, <code>string?</code>. One that is only ever
+          <code>null</code>, or whose values are of different kinds, becomes <code>object?</code>.
+        </p>
+        <h3>Numbers</h3>
+        <p>
+          Whole numbers become <code>int</code>, or <code>long</code> past 32 bits. Past 64 bits they become
+          <code>Int128</code> with System.Text.Json and <code>BigInteger</code> with Newtonsoft, the type each
+          one reads; past 128 bits, System.Text.Json reads them only as <code>double</code>, which rounds
+          them. Numbers with a fraction or an exponent become <code>decimal</code>, or
+          <code>double</code> when a value is beyond what a decimal holds.
+        </p>
+        <h3>Dates and GUIDs</h3>
+        <p>
+          ISO 8601 date-times with an offset (<code>2026-10-18T12:00:00Z</code>) become
+          <code>DateTimeOffset</code>, and without one <code>DateTime</code>; a place where only some carry an
+          offset becomes <code>DateTimeOffset</code>, with a note, and dates among date-times count as having
+          none. Dates alone (<code>2026-10-18</code>) become <code>DateOnly</code>, and GUIDs
+          <code>Guid</code>. A place is only typed that way when every value in it qualifies; otherwise it
+          stays a <code>string</code>.
+        </p>
+        <h3>Names</h3>
+        <p>
+          Property and type names are PascalCase and valid C#, whatever the JSON key. Objects found under the
+          same key with the same properties, of the same types, share one type; the items of an array are
+          named in the singular (<code>orders</code> gives <code>Order</code>). A name that would shadow a
+          common .NET type gets a suffix (<code>string</code> gives <code>StringItem</code>).
+        </p>
+        <h3>Requirements</h3>
+        <p>
+          The code needs C# 12 and .NET 8 or later, and Newtonsoft.Json 13.0.2 or later for
+          <code>DateOnly</code>. It is tested by compiling it with the .NET 10 SDK and reading the sample JSON
+          back with both serializers.
+        </p>
+        <h2>Questions</h2>
+        <h3>How do I read the JSON with these classes?</h3>
+        <p>
+          With System.Text.Json, <code>JsonSerializer.Deserialize&lt;Root&gt;(json)</code>; with
+          Newtonsoft.Json, <code>JsonConvert.DeserializeObject&lt;Root&gt;(json)</code>. When the JSON is an
+          array or a plain value, a comment at the top of the code says which type to read it as, such as
+          <code>List&lt;Root&gt;</code>.
+        </p>
+        <h3>Why is a property <code>object?</code>?</h3>
+        <p>
+          Its values were all <code>null</code>, or of different kinds, so there was nothing to tell its type
+          from; an array that was always empty gives <code>List&lt;object?&gt;</code> for the same reason. The
+          notes under the code list each such place; a sample with a real value there gives a real type.
+        </p>
+        <h3>Is my JSON uploaded?</h3>
+        <p>
+          No. It is parsed and converted in your browser, and the page's security policy blocks every network
+          request from its scripts.
+        </p>
+      </article>
+    </main>
+    <!-- site-footer -->
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -60,7 +60,47 @@ main {
   flex: 1;
   width: min(100% - 2rem, 90rem);
   margin: 0 auto;
-  padding: 2.5rem 0 1rem;
+  padding: 1.5rem 0 1rem;
+}
+
+/* The bar at the top of every page: the name, and the pages. */
+.site-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  align-items: center;
+  justify-content: space-between;
+  width: min(100% - 2rem, 90rem);
+  margin: 0 auto;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  color: var(--ink);
+  font:
+    700 1.125rem/1.2 ui-monospace,
+    monospace;
+  text-decoration: none;
+}
+
+.site-header ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-header a[aria-current='page'] {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.intro {
+  margin-bottom: 1.5rem;
 }
 
 h1 {
@@ -68,6 +108,7 @@ h1 {
   font:
     700 2.25rem/1.1 ui-monospace,
     monospace;
+  overflow-wrap: anywhere;
 }
 
 h2 {
@@ -78,11 +119,6 @@ h2 {
 .lede {
   margin: 0.5rem 0 0;
   font-size: 1.25rem;
-}
-
-.privacy {
-  margin: 0.25rem 0 1.5rem;
-  color: var(--ink-soft);
 }
 
 a {
@@ -265,6 +301,7 @@ input[type='radio'] {
 
 .pane-head {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
   margin-bottom: 0.5rem;
@@ -377,16 +414,124 @@ p.error {
   color: var(--warn);
 }
 
-footer {
-  display: flex;
+/* The text under the converter: what it does, its options, how values become types. */
+.guide {
+  max-width: 46rem;
+  margin-top: 3rem;
+}
+
+.guide h2 {
+  margin: 2.5rem 0 0.75rem;
+  font-size: 1.5rem;
+  line-height: 1.25;
+}
+
+.guide h3 {
+  margin: 1.75rem 0 0.5rem;
+  font-size: 1.125rem;
+}
+
+.guide p,
+.guide dd {
+  margin: 0 0 1rem;
+}
+
+.guide dt {
+  font-weight: 600;
+}
+
+.guide dd {
+  margin-left: 0;
+}
+
+.guide code,
+.notes code {
+  font:
+    0.9em ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+  overflow-wrap: anywhere;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
   gap: 1rem;
-  justify-content: center;
-  padding: 1.5rem 1rem;
+  margin: 1.5rem 0;
+}
+
+.card {
+  display: block;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.card:hover {
+  border-color: var(--accent);
+}
+
+.card h3 {
+  margin: 0 0 0.25rem;
+  color: var(--accent);
+}
+
+.card p {
+  margin: 0;
+}
+
+.site-footer {
+  width: min(100% - 2rem, 90rem);
+  margin: 2rem auto 0;
+  padding: 1.5rem 0;
+  border-top: 1px solid var(--line);
   color: var(--ink-soft);
+  text-align: center;
+}
+
+.site-footer p {
+  margin: 0.25rem 0;
+}
+
+.version {
+  margin-left: 0.5rem;
 }
 
 .hint {
   margin: 0;
   color: var(--warn);
   font-size: 0.875rem;
+}
+
+/* Hidden until focused, so keyboard users can jump past the header to the page's content. */
+.skip-link {
+  position: absolute;
+  top: -10rem;
+  left: 1rem;
+  z-index: 10;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.skip-link:focus {
+  top: 1rem;
+}
+
+.privacy {
+  margin: 0 0 1rem;
+  color: var(--ink-soft);
+}
+
+/* Forced colours make every link the same colour; underline the current page's instead. */
+@media (forced-colors: active) {
+  .site-header a[aria-current='page'] {
+    text-decoration: underline 3px;
+  }
 }

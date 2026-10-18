@@ -7,7 +7,7 @@ import type { Diagnostic } from '../infer';
 import type { ConvertRequest, ConvertResult, Language } from './convert';
 import { Converter, type WorkerLike } from './converter';
 import { SAMPLE } from './sample';
-import { loadSettings, parseSettings, saveInput, saveSettings, type Settings } from './settings';
+import { loadSettings, saveInput, saveSettings, settingsFromForm, type Settings } from './settings';
 
 /** Inputs this large wait a little longer after the last keystroke before converting. */
 const LARGE_INPUT = 200_000;
@@ -97,8 +97,9 @@ export function startApp(): void {
   const notes = byId('notes', HTMLElement);
   const notesList = byId('notes-list', HTMLUListElement);
   const rememberNote = byId('remember-note', HTMLParagraphElement);
-  const csharpOptions = byId('csharp-options', HTMLFieldSetElement);
-  const typescriptOptions = byId('typescript-options', HTMLFieldSetElement);
+  // A language's own page has only that language's options.
+  const csharpOptions = document.getElementById('csharp-options');
+  const typescriptOptions = document.getElementById('typescript-options');
   const fields = form.elements;
 
   const storage = localStorageOrNull();
@@ -109,40 +110,29 @@ export function startApp(): void {
   /** The JSON as last saved, so an unchanged one isn't written again. */
   let savedInput: string | null = null;
 
+  /** The settings as last read or loaded, for the fields this page doesn't have. */
+  let known = loadSettings(storage);
+
   const converter = new Converter(show, createWorker);
 
-  /** The form's values, through the same checks as stored settings. */
+  /** The form's values, through the same checks as stored settings; fields the page lacks keep theirs. */
   function read(): Settings {
-    const value = (name: string) => {
-      const field = fields.namedItem(name);
-      return field instanceof RadioNodeList ||
-        field instanceof HTMLInputElement ||
-        field instanceof HTMLSelectElement
-        ? field.value
-        : '';
-    };
-    const checked = (name: string) => {
-      const field = fields.namedItem(name);
-      return field instanceof HTMLInputElement && field.checked;
-    };
-    const settings = parseSettings({
-      language: value('language'),
-      rootName: value('rootName'),
-      csharp: {
-        kind: value('csharpKind'),
-        attributes: value('csharpAttributes'),
-        nullable: checked('csharpNullable'),
-        collection: value('csharpCollection'),
-        namespace: value('csharpNamespace'),
+    known = settingsFromForm(
+      known,
+      (name) => {
+        const field = fields.namedItem(name);
+        if (field instanceof HTMLInputElement && field.type === 'checkbox') return field.checked;
+        if (
+          field instanceof RadioNodeList ||
+          field instanceof HTMLInputElement ||
+          field instanceof HTMLSelectElement
+        )
+          return field.value;
+        return null;
       },
-      typescript: {
-        declaration: value('tsDeclaration'),
-        export: checked('tsExport'),
-        readonly: checked('tsReadonly'),
-      },
-      rememberInput: checked('rememberInput'),
-    });
-    return { ...settings, input: input.value };
+      input.value,
+    );
+    return known;
   }
 
   /** Puts settings into the form. */
@@ -160,7 +150,8 @@ export function startApp(): void {
       const field = fields.namedItem(name);
       if (field instanceof HTMLInputElement) field.checked = on;
     };
-    set('language', s.language);
+    // On a language's own page the language is the page's, not the one remembered.
+    if (fields.namedItem('language') instanceof RadioNodeList) set('language', s.language);
     set('rootName', s.rootName);
     set('csharpKind', s.csharp.kind);
     set('csharpAttributes', s.csharp.attributes);
@@ -183,8 +174,8 @@ export function startApp(): void {
   function run(): void {
     clearTimeout(timer);
     const settings = read();
-    csharpOptions.hidden = settings.language !== 'csharp';
-    typescriptOptions.hidden = settings.language !== 'typescript';
+    if (csharpOptions) csharpOptions.hidden = settings.language !== 'csharp';
+    if (typescriptOptions) typescriptOptions.hidden = settings.language !== 'typescript';
     if (input.value.length > LARGE_INPUT) say('Converting…');
     converter.request({
       json: settings.input,
@@ -330,6 +321,6 @@ export function startApp(): void {
     say(`Downloaded ${fileName}.`);
   });
 
-  write(loadSettings(storage));
+  write(known);
   run();
 }
