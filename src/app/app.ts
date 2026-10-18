@@ -2,11 +2,12 @@
  * The converter page: reads the form, converts in a worker as you type, shows the code, the notes
  * and any parse error, and remembers the options. Everything is written into the page as text.
  */
-import { convert, type ConvertRequest, type ConvertResult, type Language } from './convert';
+import workerSource from 'virtual:converter-worker';
+import type { Diagnostic } from '../infer';
+import type { ConvertRequest, ConvertResult, Language } from './convert';
+import { Converter, type WorkerLike } from './converter';
 import { SAMPLE } from './sample';
-import { loadSettings, saveSettings, type Settings } from './settings';
-import type { WorkerRequest, WorkerResponse } from './worker';
-import workerUrl from './worker?worker&url';
+import { loadSettings, parseSettings, saveInput, saveSettings, type Settings } from './settings';
 
 /** Inputs this large wait a little longer after the last keystroke before converting. */
 const LARGE_INPUT = 200_000;
@@ -19,73 +20,71 @@ function byId<T extends HTMLElement>(id: string, type: new () => T): T {
   return element;
 }
 
-/** Runs conversions in a worker, one at a time: while one runs, only the latest request waits. */
-class Converter {
-  private worker: Worker | null = createWorker();
-  private nextId = 0;
-  private running: { id: number; request: ConvertRequest } | null = null;
-  private waiting: ConvertRequest | null = null;
-
-  constructor(private readonly onResult: (result: ConvertResult) => void) {
-    this.worker?.addEventListener('message', (event: MessageEvent<WorkerResponse>) => {
-      this.finish(event.data.id, event.data.result);
-    });
-    // A worker that fails to load (an old browser, a blocked script) leaves the work to the page.
-    this.worker?.addEventListener('error', () => {
-      this.worker = null;
-      const request = this.waiting ?? this.running?.request;
-      this.running = null;
-      this.waiting = null;
-      if (request) this.request(request);
-    });
-  }
-
-  request(request: ConvertRequest): void {
-    if (!this.worker) {
-      this.onResult(convert(request));
-      return;
-    }
-    if (this.running !== null) {
-      this.waiting = request;
-      return;
-    }
-    this.running = { id: ++this.nextId, request };
-    this.worker.postMessage({ id: this.running.id, request } satisfies WorkerRequest);
-  }
-
-  private finish(id: number, result: ConvertResult): void {
-    if (id !== this.running?.id) return;
-    this.running = null;
-    const next = this.waiting;
-    this.waiting = null;
-    // A newer request makes this result stale: run that one instead of showing this.
-    if (next) this.request(next);
-    else this.onResult(result);
-  }
-}
+let workerUrl: string | undefined;
+let workerPolicy: { createScriptURL(url: string): TrustedScriptURL } | null | undefined;
 
 /**
- * The worker, created through a Trusted Types policy: the page's policy only lets scripts load
- * from URLs a named policy vouches for, and this one vouches for the worker's URL alone.
+ * A worker running the converter from a blob: URL, so it inherits the page's Content Security
+ * Policy (scripts/worker-source.mjs). It's created through a Trusted Types policy: the page's
+ * policy only lets scripts load from URLs a named policy vouches for, and this one vouches for
+ * that one blob: URL alone. The URL and the policy are made once and reused for every worker.
  */
-function createWorker(): Worker | null {
-  if (typeof Worker === 'undefined') return null;
+function createWorker(): WorkerLike | null {
+  if (typeof Worker === 'undefined' || typeof Blob === 'undefined') return null;
   try {
-    const policy = window.trustedTypes?.createPolicy('json2types-worker', {
-      createScriptURL(url) {
-        if (url !== workerUrl) throw new TypeError(`Not the converter's worker: ${url}`);
-        return url;
-      },
-    });
-    const url = policy ? (policy.createScriptURL(workerUrl) as unknown as string) : workerUrl;
-    return new Worker(url, { type: 'module' });
+    const url = (workerUrl ??= URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' })));
+    workerPolicy ??=
+      window.trustedTypes?.createPolicy('json2types-worker', {
+        createScriptURL(candidate) {
+          if (candidate !== url) throw new TypeError(`Not the converter's worker: ${candidate}`);
+          return candidate;
+        },
+      }) ?? null;
+    // TypeScript's DOM types don't know Worker takes a TrustedScriptURL yet.
+    const scriptUrl = workerPolicy ? (workerPolicy.createScriptURL(url) as unknown as string) : url;
+    return new Worker(scriptUrl, { type: 'module' });
   } catch {
     return null;
   }
 }
 
+/** localStorage, or null where it's blocked (some private modes throw on access). */
+function localStorageOrNull(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** A text field: these convert after a pause in typing rather than on every change. */
+function isTextField(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLTextAreaElement || (target instanceof HTMLInputElement && target.type === 'text')
+  );
+}
+
+/** A note as a list item, its path as code. */
+function note(diagnostic: Diagnostic): HTMLLIElement {
+  const item = document.createElement('li');
+  item.className = diagnostic.severity;
+  // The line counting the notes not shown has no place and no count of its own.
+  if (diagnostic.summary) {
+    item.textContent = diagnostic.message;
+    return item;
+  }
+  const where = document.createElement('code');
+  where.textContent = diagnostic.path;
+  const times = diagnostic.count > 1 ? ` (${String(diagnostic.count)}×)` : '';
+  const kind = diagnostic.severity === 'warning' ? 'Warning' : 'Note';
+  item.append(`${kind} at `, where, `: ${diagnostic.message}${times}`);
+  return item;
+}
+
+/** Starts the converter, if this page has one. */
 export function startApp(): void {
-  const form = byId('tool', HTMLFormElement);
+  const form = document.getElementById('tool');
+  if (!(form instanceof HTMLFormElement)) return;
   const input = byId('input', HTMLTextAreaElement);
   const code = byId('code', HTMLElement);
   const output = byId('output', HTMLPreElement);
@@ -102,14 +101,16 @@ export function startApp(): void {
   const fields = form.elements;
 
   const storage = localStorageOrNull();
-  let settings = loadSettings(storage);
-  let fileName = 'Root.cs';
+  /** What the code on show was made from; it stays on show while the JSON has an error. */
+  let shown: { fileName: string; language: Language } | null = null;
   let errorOffset: number | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  /** The JSON as last saved, so an unchanged one isn't written again. */
+  let savedInput: string | null = null;
 
-  const converter = new Converter(show);
+  const converter = new Converter(show, createWorker);
 
-  /** The form's values, as settings. */
+  /** The form's values, through the same checks as stored settings. */
   function read(): Settings {
     const value = (name: string) => {
       const field = fields.namedItem(name);
@@ -123,30 +124,24 @@ export function startApp(): void {
       const field = fields.namedItem(name);
       return field instanceof HTMLInputElement && field.checked;
     };
-    // Every choice maps to a known value, whatever the form holds.
-    return {
-      language: value('language') === 'typescript' ? 'typescript' : 'csharp',
+    const settings = parseSettings({
+      language: value('language'),
       rootName: value('rootName'),
       csharp: {
-        kind: value('csharpKind') === 'record' ? 'record' : 'class',
-        attributes:
-          value('csharpAttributes') === 'newtonsoft'
-            ? 'newtonsoft'
-            : value('csharpAttributes') === 'none'
-              ? 'none'
-              : 'systemTextJson',
+        kind: value('csharpKind'),
+        attributes: value('csharpAttributes'),
         nullable: checked('csharpNullable'),
-        collection: value('csharpCollection') === 'array' ? 'array' : 'list',
+        collection: value('csharpCollection'),
         namespace: value('csharpNamespace'),
       },
       typescript: {
-        declaration: value('tsDeclaration') === 'type' ? 'type' : 'interface',
+        declaration: value('tsDeclaration'),
         export: checked('tsExport'),
         readonly: checked('tsReadonly'),
       },
       rememberInput: checked('rememberInput'),
-      input: input.value,
-    };
+    });
+    return { ...settings, input: input.value };
   }
 
   /** Puts settings into the form. */
@@ -176,19 +171,20 @@ export function startApp(): void {
     check('tsReadonly', s.typescript.readonly);
     check('rememberInput', s.rememberInput);
     input.value = s.input;
+    savedInput = s.rememberInput ? s.input : null;
   }
 
-  function showLanguage(language: Language): void {
-    csharpOptions.hidden = language !== 'csharp';
-    typescriptOptions.hidden = language !== 'typescript';
-    outputLabel.textContent = LANGUAGE_NAMES[language];
+  /** Writes to the live region only when the text changes, so it isn't read out on every key. */
+  function say(text: string): void {
+    if (status.textContent !== text) status.textContent = text;
   }
 
   function run(): void {
     clearTimeout(timer);
-    settings = read();
-    showLanguage(settings.language);
-    if (input.value.length > LARGE_INPUT) status.textContent = 'Converting…';
+    const settings = read();
+    csharpOptions.hidden = settings.language !== 'csharp';
+    typescriptOptions.hidden = settings.language !== 'typescript';
+    if (input.value.length > LARGE_INPUT) say('Converting…');
     converter.request({
       json: settings.input,
       language: settings.language,
@@ -198,59 +194,88 @@ export function startApp(): void {
     });
   }
 
-  function show(result: ConvertResult): void {
+  /** Shows a result as of the request it answers: the form may have changed since. */
+  function show(result: ConvertResult, request: ConvertRequest): void {
+    const empty = request.json.trim() === '';
+    if (result.ok) {
+      code.textContent = result.code;
+      shown = { fileName: result.fileName, language: request.language };
+    } else if (empty) {
+      code.textContent = '';
+      shown = null;
+    }
+    // On an error the last code stays, marked out of date, so a typo doesn't blank the output; it
+    // can't be copied or downloaded, being code for a JSON that is no longer there.
+    const stale = !result.ok && shown !== null;
+    output.classList.toggle('stale', stale);
+    const language = LANGUAGE_NAMES[shown?.language ?? request.language];
+    outputLabel.textContent = stale ? `${language} code (out of date)` : `${language} code`;
+    copyButton.disabled = downloadButton.disabled = shown === null || stale;
+
+    const invalid = !result.ok && !empty;
+    error.hidden = !invalid;
+    errorMessage.textContent = invalid ? result.message : '';
+    errorOffset = invalid ? result.offset : null;
+    input.setAttribute('aria-invalid', String(invalid));
+
     if (!result.ok) {
-      // Keep the last code, marked as out of date, so a typo doesn't blank the output.
-      const empty = input.value.trim() === '';
-      if (empty) code.textContent = '';
-      output.classList.toggle('stale', !empty && code.textContent !== '');
-      copyButton.disabled = downloadButton.disabled = code.textContent === '';
-      error.hidden = empty;
-      errorMessage.textContent = result.message;
-      errorOffset = result.offset;
       notes.hidden = true;
-      status.textContent = empty ? '' : 'The JSON has an error.';
+      say(invalid ? `Error: ${result.message}` : '');
       return;
     }
-    code.textContent = result.code;
-    fileName = result.fileName;
-    output.classList.remove('stale');
-    copyButton.disabled = downloadButton.disabled = false;
-    error.hidden = true;
-    errorMessage.textContent = '';
-    errorOffset = null;
-    notesList.replaceChildren(
-      ...result.diagnostics.map((d) => {
-        const item = document.createElement('li');
-        item.className = d.severity;
-        const where = document.createElement('code');
-        where.textContent = d.path;
-        const times = d.count > 1 ? ` (${String(d.count)}×)` : '';
-        item.append(`${d.severity === 'warning' ? 'Warning' : 'Note'} at `, where, `: ${d.message}${times}`);
-        return item;
-      }),
-    );
+    notesList.replaceChildren(...result.diagnostics.map(note));
     notes.hidden = result.diagnostics.length === 0;
-    const types = result.typeCount === 1 ? '1 type' : `${String(result.typeCount)} types`;
-    status.textContent = `${types} in ${LANGUAGE_NAMES[settings.language]}.`;
+    const name = LANGUAGE_NAMES[request.language];
+    say(
+      result.typeCount === 0
+        ? `No types to declare: the ${name} code says how to read this JSON.`
+        : `${result.typeCount === 1 ? '1 type' : `${String(result.typeCount)} types`} in ${name}.`,
+    );
   }
 
+  /** Saves the options, and the JSON when it's to be remembered and has changed. */
   function remember(): void {
-    saveSettings(storage, read());
+    const settings = read();
+    saveSettings(storage, settings);
+    if (settings.rememberInput && settings.input === savedInput) return;
+    if (!settings.rememberInput && savedInput === null) return;
+    if (saveInput(storage, settings)) {
+      savedInput = settings.rememberInput ? settings.input : null;
+    } else {
+      savedInput = null;
+      say('This JSON is too large to remember in this browser; the options are saved.');
+    }
+  }
+
+  /** Replaces the JSON as an edit, so Ctrl+Z brings back what was there. */
+  function replaceInput(text: string): void {
+    input.focus();
+    input.select();
+    // execCommand is the only way to change a text field that keeps the change in its undo history.
+    const edited =
+      text === ''
+        ? // eslint-disable-next-line @typescript-eslint/no-deprecated
+          document.execCommand('delete')
+        : // eslint-disable-next-line @typescript-eslint/no-deprecated
+          document.execCommand('insertText', false, text);
+    if (!edited || input.value !== text) input.setRangeText(text, 0, input.value.length, 'end');
+    run();
+    remember();
   }
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
   });
   form.addEventListener('change', (event) => {
-    if (event.target === input) return;
-    run();
+    // Text fields convert as they're typed in (below); the remember box changes no code.
+    if (isTextField(event.target)) return;
+    if (!(event.target instanceof HTMLInputElement && event.target.name === 'rememberInput')) run();
     remember();
   });
-  // Text fields convert as you type; the JSON waits for a pause, longer when it's large.
   form.addEventListener('input', (event) => {
+    if (!isTextField(event.target)) return;
     clearTimeout(timer);
-    const delay = event.target === input ? (input.value.length > LARGE_INPUT ? 400 : 150) : 150;
+    const delay = event.target === input && input.value.length > LARGE_INPUT ? 400 : 150;
     timer = setTimeout(() => {
       run();
       remember();
@@ -258,16 +283,10 @@ export function startApp(): void {
   });
 
   byId('sample', HTMLButtonElement).addEventListener('click', () => {
-    input.value = SAMPLE;
-    run();
-    remember();
-    input.focus();
+    replaceInput(SAMPLE);
   });
   byId('clear', HTMLButtonElement).addEventListener('click', () => {
-    input.value = '';
-    run();
-    remember();
-    input.focus();
+    replaceInput('');
   });
   byId('show-error', HTMLButtonElement).addEventListener('click', () => {
     if (errorOffset === null) return;
@@ -275,17 +294,26 @@ export function startApp(): void {
     input.setSelectionRange(errorOffset, Math.min(errorOffset + 1, input.value.length));
   });
   copyButton.addEventListener('click', () => {
-    navigator.clipboard.writeText(code.textContent).then(
-      () => (status.textContent = 'Copied to the clipboard.'),
+    // navigator.clipboard is missing outside secure contexts, whatever its type says.
+    const clipboard = navigator.clipboard as Clipboard | undefined;
+    const copied = clipboard
+      ? clipboard.writeText(code.textContent)
+      : Promise.reject(new Error('No clipboard'));
+    copied.then(
+      () => {
+        say('Copied to the clipboard.');
+      },
       () => {
         // Without clipboard access, select the code so a keyboard shortcut can copy it.
         getSelection()?.selectAllChildren(code);
         output.focus();
-        status.textContent = 'Selected: press Ctrl+C (⌘C on a Mac) to copy.';
+        say('Selected: press Ctrl+C (⌘C on a Mac) to copy.');
       },
     );
   });
   downloadButton.addEventListener('click', () => {
+    if (!shown) return;
+    const { fileName } = shown;
     const url = URL.createObjectURL(new Blob([code.textContent], { type: 'text/plain' }));
     const link = document.createElement('a');
     link.href = url;
@@ -294,18 +322,9 @@ export function startApp(): void {
     setTimeout(() => {
       URL.revokeObjectURL(url);
     }, 1000);
-    status.textContent = `Downloaded ${fileName}.`;
+    say(`Downloaded ${fileName}.`);
   });
 
-  write(settings);
+  write(loadSettings(storage));
   run();
-}
-
-/** localStorage, or null where it's blocked (some private modes throw on access). */
-function localStorageOrNull(): Storage | null {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
 }

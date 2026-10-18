@@ -227,6 +227,16 @@ input[type='radio'] {
   font-weight: 600;
 }
 
+/* Forced colours replace the backgrounds that mark the chosen segment; mark it with system colours. */
+@media (forced-colors: active) {
+  .segmented label:has(input:checked) {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+}
+
 .segmented label:has(input:focus-visible) {
   z-index: 2;
   outline: 3px solid var(--focus);
@@ -286,8 +296,8 @@ button:disabled {
 
 textarea,
 pre {
-  height: min(36rem, 65dvh);
-  min-height: 16rem;
+  height: min(36rem, 55dvh);
+  min-height: min(16rem, 50dvh);
   margin: 0;
   padding: 0.75rem;
   border: 1px solid var(--line);
@@ -312,13 +322,14 @@ textarea {
 @media (width < 56rem) {
   textarea,
   pre {
-    height: 22rem;
+    height: min(22rem, 70dvh);
   }
 }
 
-/* Code from before the JSON broke, kept in view but marked as out of date. */
+/* Code from before the JSON broke, kept in view but marked as out of date (also in its heading). */
 pre.stale {
-  opacity: 0.55;
+  border-style: dashed;
+  color: var(--ink-soft);
 }
 
 .status {

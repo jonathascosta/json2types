@@ -58,12 +58,11 @@
               </select>
             </label>
             <label class="field">
-              Namespace
+              Namespace (optional)
               <input
                 name="csharpNamespace"
                 type="text"
                 maxlength="200"
-                placeholder="None"
                 autocomplete="off"
                 spellcheck="false"
               />
@@ -86,7 +85,7 @@
         </div>
 
         <div class="panes">
-          <section class="pane" aria-labelledby="input-label">
+          <section class="pane">
             <div class="pane-head">
               <h2 id="input-label"><label for="input">JSON</label></h2>
               <button type="button" id="sample">Try a sample</button>
@@ -102,26 +101,31 @@
               aria-describedby="error-message"
               placeholder='{"paste": "your JSON here"}'
             ></textarea>
+            <div class="error" id="error" hidden>
+              <p id="error-message"></p>
+              <button type="button" id="show-error">Show in the JSON</button>
+            </div>
             <label class="check"
               ><input type="checkbox" name="rememberInput" /> Remember my JSON in this browser</label
             >
           </section>
 
-          <section class="pane" aria-labelledby="output-label">
+          <section class="pane">
             <div class="pane-head">
-              <h2 id="output-label">C#</h2>
+              <h2 id="output-label">C# code</h2>
               <button type="button" id="copy" disabled>Copy</button>
               <button type="button" id="download" disabled>Download</button>
             </div>
-            <pre id="output" tabindex="0" aria-labelledby="output-label"><code id="code"></code></pre>
+            <pre
+              id="output"
+              role="region"
+              tabindex="0"
+              aria-labelledby="output-label"
+            ><code id="code"></code></pre>
           </section>
         </div>
 
         <p class="status" id="status" role="status"></p>
-        <div class="error" id="error" hidden>
-          <p id="error-message"></p>
-          <button type="button" id="show-error">Show in the JSON</button>
-        </div>
         <section class="notes" id="notes" aria-labelledby="notes-label" hidden>
           <h2 id="notes-label">Notes</h2>
           <ul id="notes-list"></ul>

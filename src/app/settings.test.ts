@@ -1,16 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, loadSettings, parseSettings, saveSettings, type Settings } from './settings';
+import {
+  DEFAULT_SETTINGS,
+  loadSettings,
+  MAX_REMEMBERED,
+  parseSettings,
+  saveInput,
+  saveSettings,
+  type Settings,
+} from './settings';
 
-function memoryStorage(initial: string | null = null) {
-  let value = initial;
+function memoryStorage(initial: Record<string, string> = {}, limit = Infinity) {
+  const values = new Map(Object.entries(initial));
   return {
-    getItem: () => value,
-    setItem: (_: string, next: string) => {
-      value = next;
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      if (value.length > limit) throw new Error('QuotaExceededError');
+      values.set(key, value);
     },
-    get value() {
-      return value;
+    removeItem: (key: string) => {
+      values.delete(key);
     },
+    values,
   };
 }
 
@@ -38,18 +48,38 @@ describe('settings', () => {
   it('saves and loads every setting', () => {
     const storage = memoryStorage();
     saveSettings(storage, CUSTOM);
+    expect(saveInput(storage, CUSTOM)).toBe(true);
     expect(loadSettings(storage)).toEqual(CUSTOM);
   });
 
-  it('keeps the JSON only when asked to', () => {
+  it('keeps the JSON apart from the options, and only when asked to', () => {
     const storage = memoryStorage();
-    saveSettings(storage, { ...CUSTOM, rememberInput: false });
-    expect(storage.value).not.toContain('"a"');
-    expect(loadSettings(storage).input).toBe('');
+    saveSettings(storage, CUSTOM);
+    expect(storage.values.get('json2types:settings')).not.toContain('"a"');
+    expect(saveInput(storage, { ...CUSTOM, rememberInput: false })).toBe(true);
+    expect(storage.values.has('json2types:input')).toBe(false);
+  });
+
+  it('forgets the JSON when remembering is turned off', () => {
+    const storage = memoryStorage({ 'json2types:input': 'secret' });
+    saveInput(storage, { ...CUSTOM, rememberInput: false });
+    expect(storage.values.has('json2types:input')).toBe(false);
+  });
+
+  it('keeps saving the options when the JSON is too large, and forgets the older JSON', () => {
+    const storage = memoryStorage({ 'json2types:input': '{"old": "secret"}' }, 50_000);
+    const large = { ...CUSTOM, input: `[${'1,'.repeat(40_000)}1]` };
+    saveSettings(storage, large);
+    expect(saveInput(storage, large)).toBe(false);
+    expect(storage.values.has('json2types:input')).toBe(false);
+    expect(loadSettings(storage)).toEqual({ ...CUSTOM, input: '' });
+    expect(saveInput(memoryStorage(), { ...CUSTOM, input: 'x'.repeat(MAX_REMEMBERED + 1) })).toBe(false);
   });
 
   it('ignores a stored JSON whose remember flag is off', () => {
-    expect(parseSettings({ rememberInput: false, input: 'secret' }).input).toBe('');
+    const storage = memoryStorage({ 'json2types:input': 'secret' });
+    saveSettings(storage, { ...CUSTOM, rememberInput: false });
+    expect(loadSettings(storage).input).toBe('');
   });
 
   it('replaces anything invalid with its default, field by field', () => {
@@ -67,7 +97,7 @@ describe('settings', () => {
   });
 
   it('survives storage that is broken, full or blocked', () => {
-    expect(loadSettings(memoryStorage('{not json'))).toEqual(DEFAULT_SETTINGS);
+    expect(loadSettings(memoryStorage({ 'json2types:settings': '{not json' }))).toEqual(DEFAULT_SETTINGS);
     const throwing = {
       getItem: () => {
         throw new Error('blocked');
@@ -75,10 +105,14 @@ describe('settings', () => {
       setItem: () => {
         throw new Error('full');
       },
+      removeItem: () => {
+        throw new Error('blocked');
+      },
     };
     expect(() => {
       saveSettings(throwing, CUSTOM);
     }).not.toThrow();
+    expect(saveInput(throwing, CUSTOM)).toBe(false);
     expect(loadSettings(throwing)).toEqual(DEFAULT_SETTINGS);
   });
 });

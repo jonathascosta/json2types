@@ -15,6 +15,7 @@ if (window.top !== window.self) {
 } else {
   const version = document.getElementById('version');
   if (version) version.textContent = `v${__APP_VERSION__}`;
-  startApp();
 }
+// Shown before the converter starts, so a page whose converter fails still shows its text.
 document.body.classList.add('frame-checked');
+if (window.top === window.self) startApp();

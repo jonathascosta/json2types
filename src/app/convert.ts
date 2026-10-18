@@ -53,3 +53,12 @@ export function convert(request: ConvertRequest): ConvertResult {
     throw error;
   }
 }
+
+/** convert, with any unexpected failure reported as a result rather than thrown. */
+export function convertSafely(request: ConvertRequest): ConvertResult {
+  try {
+    return convert(request);
+  } catch {
+    return { ok: false, message: 'Something went wrong converting this JSON.', offset: null };
+  }
+}

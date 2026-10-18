@@ -4,3 +4,8 @@
 html body:not(.frame-checked) > * {
   visibility: visible;
 }
+
+/* The converter needs scripts; without them only the message saying so is shown. */
+html .tool {
+  display: none;
+}

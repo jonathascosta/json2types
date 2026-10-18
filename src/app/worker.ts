@@ -1,5 +1,5 @@
 /** Converts off the page's thread, so a large paste never freezes typing or scrolling. */
-import { convert, type ConvertRequest, type ConvertResult } from './convert';
+import { convertSafely, type ConvertRequest, type ConvertResult } from './convert';
 
 export interface WorkerRequest {
   readonly id: number;
@@ -19,5 +19,5 @@ const scope = self as unknown as {
 
 scope.onmessage = (event) => {
   const { id, request } = event.data;
-  scope.postMessage({ id, result: convert(request) });
+  scope.postMessage({ id, result: convertSafely(request) });
 };

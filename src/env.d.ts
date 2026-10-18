@@ -13,3 +13,9 @@ interface Window {
     ): { createScriptURL(url: string): TrustedScriptURL };
   };
 }
+
+/** The converter's worker, bundled as text (scripts/worker-source.mjs). */
+declare module 'virtual:converter-worker' {
+  const source: string;
+  export default source;
+}

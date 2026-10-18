@@ -9,6 +9,17 @@ The C# it writes needs C# 12 and .NET 8 or later, with System.Text.Json or Newto
 or later.
 The TypeScript needs TypeScript 3.4 or later (`readonly` arrays, `unknown`).
 
+## How it works
+
+The page parses and converts the JSON in a Web Worker, so a large paste doesn't freeze it, and
+writes the result into the page as text. The worker is bundled into the page's script and started
+from a `blob:` URL, so the page's Content Security Policy (`scripts/csp.mjs`) covers it too: no
+network calls at all, from the page or the worker.
+
+The options are remembered in the browser's `localStorage` (`json2types:settings`). The JSON is
+remembered only if you tick "Remember my JSON" (`json2types:input`, up to 1 MB), and forgotten
+when you untick it.
+
 Planning lives in this repository's [issues](https://github.com/jonathascosta/json2types/issues)
 and [milestones](https://github.com/jonathascosta/json2types/milestones): one milestone per sprint.
 

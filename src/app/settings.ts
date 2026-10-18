@@ -1,6 +1,6 @@
 /**
- * What the page remembers between visits, in this browser only (localStorage): the language, the
- * options and, if asked to, the last JSON. Whatever is stored is checked field by field, so an old
+ * What the page remembers between visits, in this browser only (localStorage): the language and
+ * the options under one key and, if asked to, the last JSON under another. Whatever is stored is checked field by field, so an old
  * or edited entry can never put the page in a state it doesn't expect.
  */
 import type { CSharpOptions } from '../generate/csharp';
@@ -27,29 +27,65 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 const KEY = 'json2types:settings';
+/** The JSON has a key of its own, so a JSON too large to keep never stops the options being saved. */
+const INPUT_KEY = 'json2types:input';
+
+/** The largest JSON kept, in characters; browsers give a site about 5 MB in all. */
+export const MAX_REMEMBERED = 1_000_000;
 
 /** Long enough for any real name, short enough that a stored value can't bloat the page. */
 const MAX_NAME = 200;
 
 /** The stored settings, or the defaults for anything missing or invalid. */
 export function loadSettings(storage: Pick<Storage, 'getItem'> | null): Settings {
+  const read = (key: string) => {
+    try {
+      return storage?.getItem(key) ?? null;
+    } catch {
+      return null;
+    }
+  };
   let stored: unknown;
   try {
-    stored = JSON.parse(storage?.getItem(KEY) ?? 'null');
+    stored = JSON.parse(read(KEY) ?? 'null');
   } catch {
     stored = null;
   }
-  return parseSettings(stored);
+  const settings = parseSettings(stored);
+  return settings.rememberInput ? { ...settings, input: read(INPUT_KEY) ?? '' } : settings;
 }
 
-/** Saves the settings; the JSON only if `rememberInput`. Storage may be full or blocked: ignored. */
+/** Saves the options. Storage may be full or blocked: then they're just not remembered. */
 export function saveSettings(storage: Pick<Storage, 'setItem'> | null, settings: Settings): void {
-  const saved = settings.rememberInput ? settings : { ...settings, input: '' };
   try {
-    storage?.setItem(KEY, JSON.stringify(saved));
+    storage?.setItem(KEY, JSON.stringify({ ...settings, input: undefined }));
   } catch {
     // A full or blocked storage only costs remembering.
   }
+}
+
+/**
+ * Saves the JSON if `rememberInput`, or forgets it. Returns false when it's too large to keep;
+ * then any JSON kept before is forgotten too, so an old one never comes back in its place.
+ */
+export function saveInput(
+  storage: Pick<Storage, 'setItem' | 'removeItem'> | null,
+  settings: Settings,
+): boolean {
+  try {
+    if (settings.rememberInput && settings.input.length <= MAX_REMEMBERED) {
+      storage?.setItem(INPUT_KEY, settings.input);
+      return true;
+    }
+    storage?.removeItem(INPUT_KEY);
+  } catch {
+    try {
+      storage?.removeItem(INPUT_KEY);
+    } catch {
+      // Blocked storage: nothing was kept.
+    }
+  }
+  return !settings.rememberInput;
 }
 
 export function parseSettings(value: unknown): Settings {
@@ -73,7 +109,8 @@ export function parseSettings(value: unknown): Settings {
       readonly: flag(ts.readonly, d.typescript.readonly),
     },
     rememberInput: flag(s.rememberInput, d.rememberInput),
-    input: flag(s.rememberInput, false) && typeof s.input === 'string' ? s.input : '',
+    // The JSON is stored apart (loadSettings).
+    input: '',
   };
 }
 

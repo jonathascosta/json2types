@@ -75,6 +75,8 @@ export interface Diagnostic {
    * repeat counts: a key three times in one object counts 2.
    */
   readonly count: number;
+  /** Set on the last line of a list cut at MAX_DIAGNOSTICS, which counts the ones not shown. */
+  readonly summary?: true;
 }
 
 export interface Model {

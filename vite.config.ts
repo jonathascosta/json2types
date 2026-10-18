@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { defineConfig, type Plugin } from 'vite';
 import { injectPolicy } from './scripts/csp.mjs';
+import { workerSource } from './scripts/worker-source.mjs';
 
 const { version } = JSON.parse(readFileSync(new URL('package.json', import.meta.url), 'utf8')) as {
   version: string;
@@ -14,7 +15,7 @@ function securityPolicy(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [securityPolicy()],
+  plugins: [securityPolicy(), workerSource()],
   build: {
     // Keep every asset a file of its own: the policy above has no data: sources.
     assetsInlineLimit: 0,
