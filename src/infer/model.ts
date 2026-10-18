@@ -58,7 +58,11 @@ export interface ObjectDeclaration {
 }
 
 export interface Diagnostic {
-  /** Where in the JSON, as a JSONPath: `$`, `$.items[*].tags`. */
+  /**
+   * Where in the JSON, as a JSONPath for display: `$`, `$.items[*].tags`. Long keys are shortened
+   * (…), keys that then meet are numbered (#2), and lone surrogates are shown as U+FFFD, so such a
+   * path reads well but may not select the member it describes.
+   */
   readonly path: string;
   readonly severity: 'warning' | 'info';
   readonly message: string;

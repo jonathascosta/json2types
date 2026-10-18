@@ -100,6 +100,8 @@ interface ObjectShape {
   fields: Map<string, Shape>;
   /** The keys as shown in paths, so two long keys cut to the same text are told apart. */
   shown: Set<string>;
+  /** The next number to try per shown text, so thousands of keys that meet stay linear. */
+  nextShown: Map<string, number>;
 }
 
 interface ArrayShape {
@@ -175,7 +177,8 @@ function beyondDecimal(raw: string): boolean {
   if (point <= leadingZeros) return false;
   const integerPart = point >= digits.length ? digits.padEnd(point, '0') : digits.slice(0, point);
   const integer = BigInt(integerPart);
-  // At the maximum itself, a fraction of .5 or more rounds up past it.
+  // At the maximum itself, a fraction of .5 or more rounds up past it: System.Text.Json reads
+  // …335.4 but fails on …335.5 (checked against .NET 10).
   const roundsUp = /^[5-9]/.test(digits.slice(point));
   return integer > DECIMAL_MAX || (integer === DECIMAL_MAX && roundsUp);
 }
@@ -257,15 +260,18 @@ function addSample(shape: Shape, value: JsonValue, diagnostics: Diagnostics): vo
         count: 0,
         fields: new Map<string, Shape>(),
         shown: new Set<string>(),
+        nextShown: new Map<string, number>(),
       });
       object.count++;
       const fieldFor = (key: string): Shape => {
         let field = object.fields.get(key);
         if (!field) {
           let shown = shownKey(key);
-          if (shown !== key || object.shown.has(shown)) {
+          if (object.shown.has(shown)) {
             const base = shown;
-            for (let n = 2; object.shown.has(shown); n++) shown = `${base}#${String(n)}`;
+            let n = object.nextShown.get(base) ?? 2;
+            while (object.shown.has(shown)) shown = `${base}#${String(n++)}`;
+            object.nextShown.set(base, n);
           }
           object.shown.add(shown);
           field = newShape(propertyPath(shape.path, shown));
@@ -369,7 +375,11 @@ class Resolver {
     if (shape.strings) {
       const type = stringType(shape.strings);
       if (type.kind === 'dateTime' && type.offset === 'mixed') {
-        this.diagnostics.add(shape, 'info', "Some date-times here carry a time zone and some don't.");
+        this.diagnostics.add(
+          shape,
+          'info',
+          "Some date-times here carry a time zone and some don't (dates count as having none).",
+        );
       }
       return { type, nullable };
     }

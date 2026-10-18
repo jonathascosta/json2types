@@ -103,7 +103,7 @@ describe('inferModel', () => {
       {
         path: '$.at[*]',
         severity: 'info',
-        message: "Some date-times here carry a time zone and some don't.",
+        message: "Some date-times here carry a time zone and some don't (dates count as having none).",
         count: 1,
       },
     ]);
@@ -432,6 +432,17 @@ describe('inferModel', () => {
     expect(nested.diagnostics[0]?.message).toBe(
       `The key "${'k'.repeat(30)}…${'k'.repeat(10)}" appears more than once in the same object; the last value is used.`,
     );
+  });
+
+  it('shows thousands of long keys that shorten alike in linear time', () => {
+    const keys = Array.from(
+      { length: 20_000 },
+      (_, i) => `"${'p'.repeat(30)}${String(i).padStart(5, '0')}${'s'.repeat(10)}":null`,
+    );
+    const start = performance.now();
+    const model = infer(`{${keys.join(',')}}`);
+    expect(new Set(model.diagnostics.map((d) => d.path)).size).toBe(20_000);
+    expect(performance.now() - start).toBeLessThan(5000);
   });
 
   it('reports repeated keys under a very long path quickly', () => {
