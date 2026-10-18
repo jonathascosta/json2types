@@ -3,7 +3,7 @@
 Paste JSON, get types. A small web tool that turns a JSON sample into C# and TypeScript types,
 entirely in your browser: nothing you paste is sent anywhere.
 
-Live at [json2types.jonathas.net](https://json2types.jonathas.net) (coming soon).
+Live at [json2types.jonathas.net](https://json2types.jonathas.net).
 
 The C# it writes needs C# 12 and .NET 8 or later, with System.Text.Json or Newtonsoft.Json 13.0.2
 or later.
