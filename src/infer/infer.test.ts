@@ -359,6 +359,41 @@ describe('inferModel', () => {
     ]);
   });
 
+  it('keeps member names off members C# types inherit, and numbers clashes around natural names', () => {
+    const model = infer('{"toString":1,"equals":2,"getHashCode":3,"a":4,"A":5,"a2":6}');
+    expect(declaration(model, 'Root')?.properties.map((p) => p.name)).toEqual([
+      'ToStringValue',
+      'EqualsValue',
+      'GetHashCodeValue',
+      'A',
+      'A3',
+      'A2',
+    ]);
+  });
+
+  it('names thousands of clashing members in linear time', () => {
+    // 20,000 short keys that all become A: a_, a-, a.$, a@_ and so on.
+    const separators = ['_', '-', '.', '$', '@', ' '];
+    const keys = Array.from({ length: 20_000 }, (_, i) =>
+      JSON.stringify(`a${Array.from(i.toString(6), (digit) => separators[Number(digit)] ?? '').join('')}`),
+    );
+    const json = `{${keys.map((k, i) => `${k}:${String(i)}`).join(',')}}`;
+    const start = performance.now();
+    const names = declaration(infer(json), 'Root')?.properties.map((p) => p.name) ?? [];
+    expect(new Set(names).size).toBe(20_000);
+    expect(performance.now() - start).toBeLessThan(5000);
+  });
+
+  it('reports repeated keys under a very long path quickly', () => {
+    const key = JSON.stringify('k'.repeat(1_000_000));
+    const json = `{${key}:[${Array.from({ length: 20_000 }, () => '{"a":1,"a":2}').join(',')}]}`;
+    const start = performance.now();
+    const model = infer(json);
+    expect(model.diagnostics).toHaveLength(1);
+    expect(model.diagnostics[0]?.count).toBe(20_000);
+    expect(performance.now() - start).toBeLessThan(5000);
+  });
+
   it('copes with odd property names', () => {
     const model = infer(
       '{"first name":{"a":1},"last-name":{"b":1},"2fa":{"c":1},"class":{"d":1},"string":{"e":1},"":{"f":1},"endereço":{"g":1},"$ref":{"h":1}}',

@@ -202,6 +202,7 @@ export function parseJson(text: string): JsonValue {
         NUMBER.lastIndex = pos;
         const match = NUMBER.exec(text);
         if (!match) {
+          if (char === '-') return fail('Invalid number');
           return fail(pos >= text.length ? 'Unexpected end of the input' : `Unexpected ${describe(pos)}`);
         }
         pos += match[0].length;

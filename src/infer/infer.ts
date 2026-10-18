@@ -13,38 +13,57 @@ export interface InferOptions {
  * in some is nullable, integers and decimals together are decimals.
  */
 export function inferModel(json: JsonValue, options: InferOptions = {}): Model {
-  const shape = newShape();
+  const shape = newShape('$');
   const diagnostics = new Diagnostics();
-  addSample(shape, json, '$', diagnostics);
+  addSample(shape, json, diagnostics);
   const rootName = typeName(options.rootName ?? 'Root');
   const resolver = new Resolver(diagnostics);
-  const root = resolver.resolve(shape, '$', rootName, rootName);
+  const root = resolver.resolve(shape, rootName, rootName);
   const { type, declarations } = resolver.name(root.type, rootName);
   return { root: { type, nullable: root.nullable }, declarations, diagnostics: diagnostics.list() };
 }
 
-/** Collects diagnostics, folding repeats at the same place into one with a count. */
-class Diagnostics {
-  private readonly byKey = new Map<
-    string,
-    { path: string; severity: Diagnostic['severity']; message: string; count: number }
-  >();
+interface Entry {
+  path: string;
+  severity: Diagnostic['severity'];
+  message: string;
+  count: number;
+}
 
-  add(path: string, severity: Diagnostic['severity'], message: string): void {
-    const key = `${path}\n${message}`;
-    const seen = this.byKey.get(key);
-    if (seen) seen.count++;
-    else this.byKey.set(key, { path, severity, message, count: 1 });
+/**
+ * Collects diagnostics, folding repeats at the same place into one with a count. Keyed by the
+ * place's shape rather than its path, so a long path is never rebuilt or hashed once per item.
+ */
+class Diagnostics {
+  private readonly entries: Entry[] = [];
+  private readonly byPlace = new Map<Shape, Map<string, Entry>>();
+
+  add(place: Shape, severity: Diagnostic['severity'], message: string): void {
+    let messages = this.byPlace.get(place);
+    if (!messages) {
+      messages = new Map();
+      this.byPlace.set(place, messages);
+    }
+    const seen = messages.get(message);
+    if (seen) {
+      seen.count++;
+      return;
+    }
+    const entry = { path: place.path, severity, message, count: 1 };
+    messages.set(message, entry);
+    this.entries.push(entry);
   }
 
   list(): Diagnostic[] {
-    return [...this.byKey.values()];
+    return this.entries;
   }
 }
 
 // Phase 1: everything seen at each place in the JSON, merged into one shape.
 
 interface Shape {
+  /** Where in the JSON, as a JSONPath; built once, when the place is first seen. */
+  readonly path: string;
   /** Values seen here, nulls included. */
   count: number;
   nulls: number;
@@ -86,8 +105,8 @@ interface ArrayShape {
   items: Shape | null;
 }
 
-function newShape(): Shape {
-  return { count: 0, nulls: 0, strings: null, numbers: null, booleans: 0, object: null, array: null };
+function newShape(path: string): Shape {
+  return { path, count: 0, nulls: 0, strings: null, numbers: null, booleans: 0, object: null, array: null };
 }
 
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -186,7 +205,7 @@ function numberShape(raw: string): NumberShape {
 const widerBits = (a: NumberShape['bits'], b: NumberShape['bits']): NumberShape['bits'] =>
   a === 'big' || b === 'big' ? 'big' : a === 64 || b === 64 ? 64 : 32;
 
-function addSample(shape: Shape, value: JsonValue, path: string, diagnostics: Diagnostics): void {
+function addSample(shape: Shape, value: JsonValue, diagnostics: Diagnostics): void {
   shape.count++;
   switch (value.type) {
     case 'null':
@@ -227,33 +246,34 @@ function addSample(shape: Shape, value: JsonValue, path: string, diagnostics: Di
     case 'array': {
       const array = (shape.array ??= { items: null });
       for (const item of value.items) {
-        addSample((array.items ??= newShape()), item, `${path}[*]`, diagnostics);
+        addSample((array.items ??= newShape(`${shape.path}[*]`)), item, diagnostics);
       }
       return;
     }
     case 'object': {
       const object = (shape.object ??= { count: 0, fields: new Map<string, Shape>() });
       object.count++;
+      const fieldFor = (key: string): Shape => {
+        let field = object.fields.get(key);
+        if (!field) {
+          field = newShape(propertyPath(shape.path, key));
+          object.fields.set(key, field);
+        }
+        return field;
+      };
       // As in JSON.parse, the last of a repeated key wins.
       const fields = new Map<string, JsonValue>();
       for (const { key, value: fieldValue } of value.entries) {
         if (fields.has(key)) {
           diagnostics.add(
-            propertyPath(path, key),
+            fieldFor(key),
             'warning',
             `The key ${JSON.stringify(key)} appears more than once in the same object; the last value is used.`,
           );
         }
         fields.set(key, fieldValue);
       }
-      for (const [key, fieldValue] of fields) {
-        let field = object.fields.get(key);
-        if (!field) {
-          field = newShape();
-          object.fields.set(key, field);
-        }
-        addSample(field, fieldValue, propertyPath(path, key), diagnostics);
-      }
+      for (const [key, fieldValue] of fields) addSample(fieldFor(key), fieldValue, diagnostics);
       return;
     }
   }
@@ -295,7 +315,7 @@ class Resolver {
    * @param nameHint What to call an object found here.
    * @param itemHint What to call objects inside an array found here.
    */
-  resolve(shape: Shape, path: string, nameHint: string, itemHint: string): PropertyType {
+  resolve(shape: Shape, nameHint: string, itemHint: string): PropertyType {
     const nullable = shape.nulls > 0;
     const kinds = [
       shape.strings && 'string',
@@ -307,12 +327,12 @@ class Resolver {
 
     if (kinds.length === 0) {
       if (shape.count > 0)
-        this.diagnostics.add(path, 'info', 'Only null values here, so the type is unknown.');
+        this.diagnostics.add(shape, 'info', 'Only null values here, so the type is unknown.');
       return { type: { kind: 'any' }, nullable };
     }
     if (kinds.length > 1) {
       this.diagnostics.add(
-        path,
+        shape,
         'warning',
         `Values of different kinds here (${kinds.join(', ')}), so the type is unknown.`,
       );
@@ -325,39 +345,34 @@ class Resolver {
       if (!decimal) return { type: { kind: 'integer', bits }, nullable };
       // Only floating point loses these; integers of any size are kept whole.
       if (beyondDecimal && infinite) {
-        this.diagnostics.add(path, 'warning', 'A number here is too large even for floating point.');
+        this.diagnostics.add(shape, 'warning', 'A number here is too large even for floating point.');
       }
       if (beyondDecimal && underflows) {
         this.diagnostics.add(
-          path,
+          shape,
           'warning',
           'A number here is too small even for floating point; it reads as 0.',
         );
       }
       return { type: { kind: beyondDecimal ? 'float' : 'decimal' }, nullable };
     }
-    if (shape.object) return { type: this.collect(shape.object, path, nameHint), nullable };
+    if (shape.object) return { type: this.collect(shape.object, nameHint), nullable };
     if (shape.array) {
       if (!shape.array.items) {
-        this.diagnostics.add(path, 'info', 'Only empty arrays here, so the item type is unknown.');
+        this.diagnostics.add(shape, 'info', 'Only empty arrays here, so the item type is unknown.');
         return { type: { kind: 'array', items: { type: { kind: 'any' }, nullable: false } }, nullable };
       }
-      const items = this.resolve(shape.array.items, `${path}[*]`, itemHint, itemHint);
+      const items = this.resolve(shape.array.items, itemHint, itemHint);
       return { type: { kind: 'array', items }, nullable };
     }
     return { type: { kind: 'boolean' }, nullable };
   }
 
-  private collect(object: ObjectShape, path: string, nameHint: string): TypeRef {
+  private collect(object: ObjectShape, nameHint: string): TypeRef {
     const properties: Property[] = [];
     for (const [key, field] of object.fields) {
       const name = pascalCase(key);
-      const type = this.resolve(
-        field,
-        propertyPath(path, key),
-        avoidReserved(name),
-        avoidReserved(singular(name)),
-      );
+      const type = this.resolve(field, avoidReserved(name), avoidReserved(singular(name)));
       // The member name is set once the type itself is named (withMemberNames).
       properties.push({ jsonName: key, name: '', ...type, optional: field.count < object.count });
     }
@@ -455,15 +470,44 @@ class Resolver {
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
- * Gives each property a member name: its key in PascalCase, numbered when two keys meet (a, A),
- * and with Value appended when it would equal the type's own name.
+ * Members every C# type inherits, or a record generates; a property named like one would hide it
+ * or fail to compile.
+ */
+const INHERITED_MEMBERS = new Set([
+  'Clone',
+  'Deconstruct',
+  'EqualityContract',
+  'Equals',
+  'Finalize',
+  'GetHashCode',
+  'GetType',
+  'MemberwiseClone',
+  'PrintMembers',
+  'ReferenceEquals',
+  'ToString',
+]);
+
+/**
+ * Gives each property a member name: its key in PascalCase; with Value appended when that is the
+ * type's own name or an inherited member (ToString → ToStringValue); numbered when two keys meet
+ * (a, A → A, A2), skipping names other keys would get by themselves (a, A, a2 → A, A3, A2).
  */
 function withMemberNames(typeName: string, properties: readonly Property[]): Property[] {
+  const natural = properties.map((property) => pascalCase(property.jsonName));
+  const naturalSet = new Set(natural);
   const used = new Set([typeName]);
-  return properties.map((property) => {
-    const base = pascalCase(property.jsonName);
-    let name = base === typeName ? `${base}Value` : base;
-    for (let n = 2; used.has(name); n++) name = `${base}${String(n)}`;
+  // The next number to try per name, so many keys that meet stay linear.
+  const nextNumber = new Map<string, number>();
+  return properties.map((property, index) => {
+    const own = natural[index] ?? 'Item';
+    const base = own === typeName || INHERITED_MEMBERS.has(own) ? `${own}Value` : own;
+    let name = base;
+    if (used.has(name)) {
+      let n = nextNumber.get(base) ?? 2;
+      do name = `${base}${String(n++)}`;
+      while (used.has(name) || naturalSet.has(name));
+      nextNumber.set(base, n);
+    }
     used.add(name);
     return { ...property, name };
   });

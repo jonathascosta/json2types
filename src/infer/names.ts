@@ -19,7 +19,9 @@ const RESERVED = new Set([
   'Boolean',
   'Buffer',
   'Byte',
+  'Capitalize',
   'Char',
+  'Comment',
   'Console',
   'Date',
   'DateOnly',
@@ -43,7 +45,10 @@ const RESERVED = new Set([
   'Guid',
   'Half',
   'Headers',
+  'History',
+  'Image',
   'Index',
+  'InstanceType',
   'Int128',
   'Int16',
   'Int32',
@@ -55,15 +60,20 @@ const RESERVED = new Set([
   'JsonNode',
   'List',
   'Location',
+  'Lowercase',
   'Map',
   'Math',
   'Node',
+  'NonNullable',
   'Nullable',
   'Number',
   'Object',
   'Omit',
+  'Option',
+  'Parameters',
   'Partial',
   'Pick',
+  'Position',
   'Promise',
   'Proxy',
   'Random',
@@ -76,18 +86,23 @@ const RESERVED = new Set([
   'Required',
   'Response',
   'ReturnType',
+  'Selection',
   'Set',
   'Single',
+  'Storage',
   'Stream',
   'String',
   'Symbol',
   'System',
   'Task',
+  'Text',
+  'ThisType',
   'TimeOnly',
   'TimeSpan',
   'Tuple',
   'Type',
   'Uint8Array',
+  'Uppercase',
   'Uri',
   'URL',
   'Version',
@@ -101,13 +116,6 @@ export function avoidReserved(name: string): string {
   return RESERVED.has(name) ? `${name}Item` : name;
 }
 
-/**
- * Whether a character can be part of an identifier in both C# and TypeScript: a letter, a combining
- * mark (Mn, Mc), a decimal digit or a letter-like number, that ECMAScript also allows (ID_Continue).
- */
-const identifierPart = (char: string): boolean =>
-  /[\p{L}\p{Mn}\p{Mc}\p{Nd}\p{Nl}]/u.test(char) && /\p{ID_Continue}/u.test(char);
-
 /** Capitalises a word's first letter, unless that would change its length (ß → SS). */
 function capitalise(word: string): string {
   const first = String.fromCodePoint(word.codePointAt(0) ?? 0);
@@ -117,11 +125,16 @@ function capitalise(word: string): string {
 
 /**
  * Turns any JSON key into PascalCase words: "home address" → HomeAddress, "HOME_ADDRESS" →
- * HomeAddress, "2fa" → Item2fa. Words are runs of identifier characters (see identifierPart);
+ * HomeAddress, "2fa" → Item2fa. Words are runs of characters valid in identifiers in both languages (letters, Mn and Mc marks,
+ * decimal digits, letter numbers, all within ECMAScript's ID_Continue);
  * everything else separates them, so the result is a valid identifier in C# and TypeScript.
  */
 export function pascalCase(key: string): string {
-  const separated = key.normalize('NFC').replace(/./gsu, (char) => (identifierPart(char) ? char : ' '));
+  // Two passes instead of a callback per character: outside the C# classes, then outside ID_Continue.
+  const separated = key
+    .normalize('NFC')
+    .replace(/[^\p{L}\p{Mn}\p{Mc}\p{Nd}\p{Nl}]/gu, ' ')
+    .replace(/\P{ID_Continue}/gu, ' ');
   const words = separated
     .replace(/([\p{Ll}\p{Nd}])(\p{Lu})/gu, '$1 $2')
     .split(' ')
@@ -199,6 +212,26 @@ const IRREGULAR = new Map(
     phenomena: 'phenomenon',
     axes: 'axis',
     apis: 'api',
+    emojis: 'emoji',
+    wikis: 'wiki',
+    skis: 'ski',
+    kiwis: 'kiwi',
+    taxis: 'taxi',
+    minis: 'mini',
+    unis: 'uni',
+    kpis: 'kpi',
+    dies: 'die',
+    atlases: 'atlas',
+    biases: 'bias',
+    focuses: 'focus',
+    hypotheses: 'hypothesis',
+    synopses: 'synopsis',
+    parentheses: 'parenthesis',
+    emphases: 'emphasis',
+    oases: 'oasis',
+    waltzes: 'waltz',
+    dwarves: 'dwarf',
+    appendices: 'appendix',
     menus: 'menu',
     gurus: 'guru',
     emus: 'emu',
@@ -251,7 +284,9 @@ const UNCOUNTABLE = new Set([
   'feedback',
   'media',
   'status',
-  'settings',
+  'analytics',
+  'statistics',
+  'physics',
 ]);
 
 /**
