@@ -17,13 +17,120 @@
   </head>
   <body>
     <main>
-      <h1>json2types</h1>
-      <p class="lede">Paste JSON, get C# and TypeScript types.</p>
-      <p>Everything runs in your browser: nothing you paste is uploaded.</p>
-      <p class="status" id="status">Coming soon.</p>
+      <header class="intro">
+        <h1>json2types</h1>
+        <p class="lede">Paste JSON, get C# and TypeScript types.</p>
+        <p class="privacy">Everything runs in your browser: nothing you paste is uploaded.</p>
+        <noscript><p class="error">The converter needs JavaScript, which is turned off.</p></noscript>
+      </header>
+
+      <form class="tool" id="tool" aria-label="Converter">
+        <div class="settings">
+          <fieldset class="segmented">
+            <legend>Language</legend>
+            <label><input type="radio" name="language" value="csharp" checked /> C#</label>
+            <label><input type="radio" name="language" value="typescript" /> TypeScript</label>
+          </fieldset>
+
+          <label class="field">
+            Root type name
+            <input name="rootName" type="text" maxlength="200" autocomplete="off" spellcheck="false" />
+          </label>
+
+          <fieldset class="options" id="csharp-options">
+            <legend>C# options</legend>
+            <fieldset class="segmented">
+              <legend>Declare</legend>
+              <label><input type="radio" name="csharpKind" value="class" checked /> Classes</label>
+              <label><input type="radio" name="csharpKind" value="record" /> Records</label>
+            </fieldset>
+            <fieldset class="segmented">
+              <legend>Collections</legend>
+              <label><input type="radio" name="csharpCollection" value="list" checked /> List&lt;T&gt;</label>
+              <label><input type="radio" name="csharpCollection" value="array" /> T[]</label>
+            </fieldset>
+            <label class="field">
+              Attributes
+              <select name="csharpAttributes">
+                <option value="systemTextJson">System.Text.Json</option>
+                <option value="newtonsoft">Newtonsoft.Json</option>
+                <option value="none">None</option>
+              </select>
+            </label>
+            <label class="field">
+              Namespace
+              <input
+                name="csharpNamespace"
+                type="text"
+                maxlength="200"
+                placeholder="None"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </label>
+            <label class="check"
+              ><input type="checkbox" name="csharpNullable" checked /> Nullable reference types</label
+            >
+          </fieldset>
+
+          <fieldset class="options" id="typescript-options" hidden>
+            <legend>TypeScript options</legend>
+            <fieldset class="segmented">
+              <legend>Declare</legend>
+              <label><input type="radio" name="tsDeclaration" value="interface" checked /> Interfaces</label>
+              <label><input type="radio" name="tsDeclaration" value="type" /> Types</label>
+            </fieldset>
+            <label class="check"><input type="checkbox" name="tsExport" checked /> Export</label>
+            <label class="check"><input type="checkbox" name="tsReadonly" /> Read-only</label>
+          </fieldset>
+        </div>
+
+        <div class="panes">
+          <section class="pane" aria-labelledby="input-label">
+            <div class="pane-head">
+              <h2 id="input-label"><label for="input">JSON</label></h2>
+              <button type="button" id="sample">Try a sample</button>
+              <button type="button" id="clear">Clear</button>
+            </div>
+            <textarea
+              id="input"
+              name="input"
+              spellcheck="false"
+              autocapitalize="off"
+              autocomplete="off"
+              wrap="off"
+              aria-describedby="error-message"
+              placeholder='{"paste": "your JSON here"}'
+            ></textarea>
+            <label class="check"
+              ><input type="checkbox" name="rememberInput" /> Remember my JSON in this browser</label
+            >
+          </section>
+
+          <section class="pane" aria-labelledby="output-label">
+            <div class="pane-head">
+              <h2 id="output-label">C#</h2>
+              <button type="button" id="copy" disabled>Copy</button>
+              <button type="button" id="download" disabled>Download</button>
+            </div>
+            <pre id="output" tabindex="0" aria-labelledby="output-label"><code id="code"></code></pre>
+          </section>
+        </div>
+
+        <p class="status" id="status" role="status"></p>
+        <div class="error" id="error" hidden>
+          <p id="error-message"></p>
+          <button type="button" id="show-error">Show in the JSON</button>
+        </div>
+        <section class="notes" id="notes" aria-labelledby="notes-label" hidden>
+          <h2 id="notes-label">Notes</h2>
+          <ul id="notes-list"></ul>
+        </section>
+      </form>
     </main>
     <footer>
       <a href="https://www.jonathas.net">jonathas.net</a>
+      <span class="version" id="version"></span>
     </footer>
     <script type="module" src="/src/main.ts"></script>
   </body>

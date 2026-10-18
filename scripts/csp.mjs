@@ -1,7 +1,8 @@
 // The page promises that nothing pasted into it leaves the browser. This policy holds it to that:
 // no requests to other origins and no network calls from scripts at all. Trusted Types make any
 // string written into the DOM as HTML or script an error, so the generated code can only ever be
-// shown as text. Shared by the Vite build, which writes it into every page, and by check-dist, which
+// shown as text; the one policy allowed, json2types-worker, vouches for the converter's worker URL
+// and nothing else (src/app/app.ts). Shared by the Vite build, which writes it into every page, and by check-dist, which
 // checks it is still there.
 //
 // default-src 'self' also covers styles: inline <style> blocks and style="" attributes are blocked.
@@ -12,7 +13,7 @@ export const contentSecurityPolicy = [
   "base-uri 'none'",
   "form-action 'none'",
   "require-trusted-types-for 'script'",
-  "trusted-types 'none'",
+  'trusted-types json2types-worker',
 ].join('; ');
 
 const charset = /<meta\s+charset=["']?utf-8["']?\s*\/?>/i;
