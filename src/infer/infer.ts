@@ -358,7 +358,8 @@ class Resolver {
         avoidReserved(name),
         avoidReserved(singular(name)),
       );
-      properties.push({ jsonName: key, ...type, optional: field.count < object.count });
+      // The member name is set once the type itself is named (withMemberNames).
+      properties.push({ jsonName: key, name: '', ...type, optional: field.count < object.count });
     }
 
     // Only objects with the same name hint are shared (billing.address and shipping.address), so a
@@ -431,10 +432,16 @@ class Resolver {
       if (type.kind === 'object') return { kind: 'object', name: names.get(type.name) ?? type.name };
       return type;
     };
-    const declarations = order.map((id) => ({
-      name: names.get(id) ?? id,
-      properties: this.pendingFor(id).properties.map((p) => ({ ...p, type: rename(p.type) })),
-    }));
+    const declarations = order.map((id) => {
+      const name = names.get(id) ?? id;
+      return {
+        name,
+        properties: withMemberNames(
+          name,
+          this.pendingFor(id).properties.map((p) => ({ ...p, type: rename(p.type) })),
+        ),
+      };
+    });
     return { type: rename(root), declarations };
   }
 
@@ -446,3 +453,18 @@ class Resolver {
 }
 
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * Gives each property a member name: its key in PascalCase, numbered when two keys meet (a, A),
+ * and with Value appended when it would equal the type's own name.
+ */
+function withMemberNames(typeName: string, properties: readonly Property[]): Property[] {
+  const used = new Set([typeName]);
+  return properties.map((property) => {
+    const base = pascalCase(property.jsonName);
+    let name = base === typeName ? `${base}Value` : base;
+    for (let n = 2; used.has(name); n++) name = `${base}${String(n)}`;
+    used.add(name);
+    return { ...property, name };
+  });
+}

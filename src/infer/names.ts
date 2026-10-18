@@ -199,6 +199,17 @@ const IRREGULAR = new Map(
     phenomena: 'phenomenon',
     axes: 'axis',
     apis: 'api',
+    menus: 'menu',
+    gurus: 'guru',
+    emus: 'emu',
+    haikus: 'haiku',
+    volcanoes: 'volcano',
+    calves: 'calf',
+    selves: 'self',
+    hooves: 'hoof',
+    scarves: 'scarf',
+    prairies: 'prairie',
+    freebies: 'freebie',
     // -che words, whose plural only adds an s.
     caches: 'cache',
     niches: 'niche',
@@ -211,6 +222,21 @@ const IRREGULAR = new Map(
     psyches: 'psyche',
   }),
 );
+
+/** Words that end in s but aren't plurals; other -as and -ns words are (Ideas, Columns). */
+const SINGULAR_IN_S = new Set([
+  'alias',
+  'atlas',
+  'canvas',
+  'gas',
+  'lens',
+  'means',
+  'chaos',
+  'cos',
+  'yes',
+  'aws',
+  'ios',
+]);
 
 /** Words that are the same in the plural, or have no singular worth using. */
 const UNCOUNTABLE = new Set([
@@ -261,8 +287,8 @@ export function singular(name: string): string {
   if (/[^aeiou]ies$/.test(lower)) return restore(`${lower.slice(0, -3)}y`);
   // Boxes, Addresses, Wishes, Buzzes, Matches, Speeches; the -che words are in IRREGULAR.
   if (/(?:ss|x|sh|zz|ch)es$/.test(lower)) return restore(lower.slice(0, -2));
-  // Not plurals: Analysis, Status, Canvas, Lens, Class.
-  if (/(?:is|us|as|ns|ss)$/.test(lower)) return `${name}Item`;
+  // Not plurals: Analysis, Class, Status, Bus; the plurals among -us words (Menus) are in IRREGULAR.
+  if (/(?:is|ss|us)$/.test(lower) || SINGULAR_IN_S.has(lower)) return `${name}Item`;
   if (lower.endsWith('s')) return restore(lower.slice(0, -1));
   return `${name}Item`;
 }

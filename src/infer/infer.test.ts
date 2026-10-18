@@ -20,11 +20,17 @@ describe('inferModel', () => {
     expect(model.root).toEqual(plain({ kind: 'object', name: 'Root' }));
     expect(names(model)).toEqual(['Root', 'Address', 'Geo']);
     expect(declaration(model, 'Root')?.properties).toEqual([
-      { jsonName: 'name', type: { kind: 'string' }, nullable: false, optional: false },
-      { jsonName: 'age', type: { kind: 'integer', bits: 32 }, nullable: false, optional: false },
-      { jsonName: 'score', type: { kind: 'decimal' }, nullable: false, optional: false },
-      { jsonName: 'active', type: { kind: 'boolean' }, nullable: false, optional: false },
-      { jsonName: 'address', type: { kind: 'object', name: 'Address' }, nullable: false, optional: false },
+      { jsonName: 'name', name: 'Name', type: { kind: 'string' }, nullable: false, optional: false },
+      { jsonName: 'age', name: 'Age', type: { kind: 'integer', bits: 32 }, nullable: false, optional: false },
+      { jsonName: 'score', name: 'Score', type: { kind: 'decimal' }, nullable: false, optional: false },
+      { jsonName: 'active', name: 'Active', type: { kind: 'boolean' }, nullable: false, optional: false },
+      {
+        jsonName: 'address',
+        name: 'Address',
+        type: { kind: 'object', name: 'Address' },
+        nullable: false,
+        optional: false,
+      },
     ]);
     expect(model.diagnostics).toEqual([]);
   });
@@ -38,9 +44,9 @@ describe('inferModel', () => {
       items: plain({ kind: 'object', name: 'Item' }),
     });
     expect(declaration(model, 'Item')?.properties).toEqual([
-      { jsonName: 'id', type: { kind: 'integer', bits: 32 }, nullable: false, optional: false },
-      { jsonName: 'note', type: { kind: 'string' }, nullable: false, optional: true },
-      { jsonName: 'tag', type: { kind: 'string' }, nullable: true, optional: false },
+      { jsonName: 'id', name: 'Id', type: { kind: 'integer', bits: 32 }, nullable: false, optional: false },
+      { jsonName: 'note', name: 'Note', type: { kind: 'string' }, nullable: false, optional: true },
+      { jsonName: 'tag', name: 'Tag', type: { kind: 'string' }, nullable: true, optional: false },
     ]);
   });
 
@@ -339,6 +345,18 @@ describe('inferModel', () => {
     expect(at('0001-01-01T00:00:00+01:00')).toBe('string');
     expect(at('9999-12-31T22:59:59-01:00')).toBe('dateTime');
     expect(at('0001-01-01T01:00:00+01:00')).toBe('dateTime');
+  });
+
+  it('gives properties member names, unique and never the name of their own type', () => {
+    const model = infer('{"user":{"user":"x","first_name":"a","firstName":"b","a":1,"A":2,"a_":3}}');
+    expect(declaration(model, 'User')?.properties.map((p) => [p.jsonName, p.name])).toEqual([
+      ['user', 'UserValue'],
+      ['first_name', 'FirstName'],
+      ['firstName', 'FirstName2'],
+      ['a', 'A'],
+      ['A', 'A2'],
+      ['a_', 'A3'],
+    ]);
   });
 
   it('copes with odd property names', () => {

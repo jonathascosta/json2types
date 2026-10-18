@@ -35,16 +35,18 @@ export class JsonParseError extends Error {
 /** How many levels arrays and objects may nest (the outermost is level 1), to keep the stack safe. */
 export const MAX_DEPTH = 500;
 
-const ESCAPES: Readonly<Record<string, string>> = {
-  '"': '"',
-  '\\': '\\',
-  '/': '/',
-  b: '\b',
-  f: '\f',
-  n: '\n',
-  r: '\r',
-  t: '\t',
-};
+const ESCAPES = new Map(
+  Object.entries({
+    '"': '"',
+    '\\': '\\',
+    '/': '/',
+    b: '\b',
+    f: '\f',
+    n: '\n',
+    r: '\r',
+    t: '\t',
+  }),
+);
 
 const NUMBER = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y;
 
@@ -116,7 +118,7 @@ export function parseJson(text: string): JsonValue {
         result += String.fromCharCode(parseInt(hex, 16));
         pos += 6;
       } else {
-        const char = ESCAPES[escape];
+        const char = ESCAPES.get(escape);
         if (char === undefined) return fail(`Invalid escape '\\${escape}'`);
         result += char;
         pos += 2;
@@ -203,6 +205,8 @@ export function parseJson(text: string): JsonValue {
           return fail(pos >= text.length ? 'Unexpected end of the input' : `Unexpected ${describe(pos)}`);
         }
         pos += match[0].length;
+        // A number cut short or run on (01, 1., 1e, 1.5.2) is one bad number, not two tokens.
+        if (/[\d.eE+-]/.test(text[pos] ?? '')) fail('Invalid number', pos - match[0].length);
         return { type: 'number', raw: match[0] };
       }
     }

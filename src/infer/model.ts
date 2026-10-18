@@ -38,6 +38,11 @@ export interface PropertyType {
 export interface Property extends PropertyType {
   /** The name as it appears in the JSON, unchanged. */
   readonly jsonName: string;
+  /**
+   * A PascalCase member name for languages that rename members (C#): unique within its type and
+   * never the type's own name, which C# forbids (first_name → FirstName; "a" and "A" → A, A2).
+   */
+  readonly name: string;
   /** Missing from at least one of the objects merged into this type. */
   readonly optional: boolean;
 }
