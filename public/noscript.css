@@ -1,0 +1,6 @@
+/* Without scripts the frame check can't run, so the content is shown as is. The selector is one step
+   more specific than the rule that hides it in styles.css, because Vite places that sheet after this
+   one in the built page. */
+html body:not(.frame-checked) > * {
+  visibility: visible;
+}

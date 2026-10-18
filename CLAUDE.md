@@ -15,20 +15,26 @@ of the owner's.
 2. **Develop.**
 3. **Test.** If anything goes wrong, go back to step 1: a new development round, timed again.
 4. **Review** with two independent agents:
-   - one that knows the development context (the task, the decisions taken, the conversation);
-   - one with no context of the task at all, only expertise in the technology used, reviewing
+   - **Atlas** knows the business and the task: the development context, the decisions taken, the
+     conversation;
+   - **Spock** knows nothing of the business or the task, only the technology used, and reviews
      the diff on its own.
 
    Report what they find in this table:
 
    | Priority | Short description | Resolved | How to resolve |
-   | --- | --- | --- | --- |
-   | P0, P1 or P2 | … | Yes / No | … |
+   | -------- | ----------------- | -------- | -------------- |
+   | P0 to P4 | …                 | Yes / No | …              |
 
-   After presenting the table, if any finding is still unresolved, go back to step 1.
+   After presenting the table, if any P0, P1 or P2 finding is still unresolved, go back to step 1.
+   P3 and P4 findings that don't matter yet may instead be recorded as issues for later (the table
+   links the issue) without another round.
+
 5. **Open a pull request**, with the timings and the review table in its description. Merge it
    only if the owner has said that pull requests go in automatically; otherwise wait for the
    owner's approval on each pull request.
 
 Priorities: **P0** breaks the product, loses data or is a security problem; **P1** is a real bug
-or a clear gap in what the task asked for; **P2** is a minor issue, polish or a nit.
+or a clear gap in what the task asked for; **P2** is a minor issue that is worth fixing now;
+**P3** is an improvement that can wait; **P4** is an idea or a nit with little value today. The scale
+doesn't stop the reviewers: they report everything they find, at whatever level fits.
