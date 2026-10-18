@@ -36,6 +36,9 @@ export default defineConfig({
   build: {
     // Keep every asset a file of its own: the policy above has no data: sources.
     assetsInlineLimit: 0,
+    // The polyfill loads modules with fetch(), which connect-src 'none' blocks; every browser the
+    // site supports has native modulepreload.
+    modulePreload: { polyfill: false },
   },
   define: {
     __APP_VERSION__: JSON.stringify(version),
