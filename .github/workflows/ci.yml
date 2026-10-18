@@ -91,8 +91,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Headless runs use Chromium's headless shell alone, a smaller download than full Chromium.
       - name: Install Chromium for Playwright
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps --only-shell chromium
 
       - name: Build
         run: npm run build
@@ -103,8 +104,9 @@ jobs:
       - name: Lighthouse
         run: npm run lighthouse
 
+      # Also when a step timed out: that is when the reports matter most.
       - name: Upload reports
-        if: failure()
+        if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: quality-reports

@@ -81,11 +81,27 @@ export function findMissingPages(files) {
   const robots = files.find((file) => file.name === 'robots.txt')?.text;
   if (robots === undefined) problems.push('dist/ has no robots.txt');
   else {
-    const lines = robots.split('\n').filter((line) => line.trim() !== '' && !line.startsWith('#'));
-    if (!lines.every((line) => /^(User-agent|Allow|Disallow|Sitemap):\s*\S/.test(line))) {
+    // Field names are case-insensitive and unknown fields are ignored (RFC 9309): only the form of
+    // each line matters, then that the site isn't closed to crawlers and the sitemap is named.
+    const lines = robots
+      .split(/\r?\n/)
+      .map((line) => line.replace(/#.*/, '').trim())
+      .filter((line) => line !== '');
+    const fields = lines.map((line) => /^([A-Za-z-]+)\s*:\s*(.*)$/.exec(line));
+    if (fields.some((field) => field === null))
       problems.push('robots.txt: has a line crawlers would not understand');
+    let everyone = false;
+    for (const field of fields) {
+      const name = field?.[1]?.toLowerCase();
+      const value = field?.[2] ?? '';
+      if (name === 'user-agent') everyone = value === '*';
+      else if (name === 'disallow' && everyone && value === '/')
+        problems.push('robots.txt: closes the site to crawlers');
     }
-    if (!lines.includes('Sitemap: https://json2types.jonathas.net/sitemap.xml')) {
+    const sitemaps = fields
+      .filter((field) => field?.[1]?.toLowerCase() === 'sitemap')
+      .map((field) => field?.[2]);
+    if (!sitemaps.includes('https://json2types.jonathas.net/sitemap.xml')) {
       problems.push("robots.txt: doesn't point to the sitemap");
     }
   }

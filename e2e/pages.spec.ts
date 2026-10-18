@@ -1,44 +1,52 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
+
+const LANGUAGE_PAGES = [
+  { path: '/csharp/', heading: 'JSON to C#', own: '#csharp-options', other: '#typescript-options' },
+  {
+    path: '/typescript/',
+    heading: 'JSON to TypeScript',
+    own: '#typescript-options',
+    other: '#csharp-options',
+  },
+] as const;
 
 test('each page has its own title, heading and canonical, and marks itself in the nav', async ({ page }) => {
   const pages = [
-    ['/', 'json2types', 'Home', 'https://json2types.jonathas.net/'],
-    ['/csharp/', 'JSON to C#', 'JSON to C#', 'https://json2types.jonathas.net/csharp/'],
-    [
-      '/typescript/',
-      'JSON to TypeScript',
-      'JSON to TypeScript',
-      'https://json2types.jonathas.net/typescript/',
-    ],
+    { path: '/', heading: 'json2types', current: 'Home' },
+    ...LANGUAGE_PAGES.map((p) => ({ ...p, current: p.heading })),
   ];
   const titles = new Set<string>();
-  for (const [path, heading, current, canonical] of pages) {
-    await page.goto(path ?? '');
+  for (const { path, heading, current } of pages) {
+    await page.goto(path);
     titles.add(await page.title());
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(heading ?? '');
-    await expect(page.locator('nav [aria-current="page"]')).toHaveText(current ?? '');
-    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', canonical ?? '');
-    await expect(
-      page.getByText('Everything runs in your browser: nothing you paste is uploaded.').first(),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(heading);
+    await expect(page.locator('nav [aria-current="page"]')).toHaveText(current);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+      'href',
+      `https://json2types.jonathas.net${path}`,
+    );
+    await expect(page.locator('.privacy')).toHaveText(
+      'Everything runs in your browser: nothing you paste is uploaded.',
+    );
   }
   expect(titles.size).toBe(3);
 });
 
-test('a language page has no language switch and only its own options', async ({ page }) => {
-  await page.goto('/typescript/');
-  await expect(page.locator('input[type=radio][name=language]')).toHaveCount(0);
-  await expect(page.locator('#csharp-options')).toHaveCount(0);
-  await expect(page.getByLabel('Read-only')).toBeVisible();
-});
+for (const { path, own, other } of LANGUAGE_PAGES) {
+  test(`${path} has no language switch and only its own options`, async ({ page }) => {
+    await page.goto(path);
+    await expect(page.locator('input[type=radio][name=language]')).toHaveCount(0);
+    await expect(page.locator(other)).toHaveCount(0);
+    await expect(page.locator(own)).toBeVisible();
+  });
+}
 
 test('the home page links to both language pages', async ({ page }) => {
-  await page.goto('/');
-  await page
-    .locator('.cards')
-    .getByRole('link', { name: /JSON to C#/ })
-    .click();
-  await expect(page).toHaveURL(/\/csharp\/$/);
+  for (const { path, heading } of LANGUAGE_PAGES) {
+    await page.goto('/');
+    await page.locator('.cards').getByRole('link', { name: heading }).click();
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+  }
 });
 
 test('the not-found page is kept out of search and leads back', async ({ page }) => {

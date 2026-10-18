@@ -139,6 +139,20 @@ describe('findMissingPages', () => {
       'robots.txt: has a line crawlers would not understand',
       "robots.txt: doesn't point to the sitemap",
     ]);
+    site[5] = {
+      name: 'robots.txt',
+      text: 'User-agent: *\nDisallow: /\nSitemap: https://json2types.jonathas.net/sitemap.xml',
+    };
+    expect(findMissingPages(site)).toEqual(['robots.txt: closes the site to crawlers']);
+  });
+
+  it('reads robots.txt as crawlers do: any case, CRLF, comments, empty Disallow, other fields', () => {
+    const site = complete();
+    site[5] = {
+      name: 'robots.txt',
+      text: '# crawl it all\r\nuser-agent: *\r\nDisallow:\r\nCrawl-delay: 1\r\nUser-agent: BadBot\r\nDisallow: /\r\nSITEMAP: https://json2types.jonathas.net/sitemap.xml\r\n',
+    };
+    expect(findMissingPages(site)).toEqual([]);
     expect(findMissingPages(complete().slice(0, 5))).toEqual(['dist/ has no robots.txt']);
   });
 

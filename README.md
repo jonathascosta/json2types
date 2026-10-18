@@ -29,7 +29,7 @@ and [milestones](https://github.com/jonathascosta/json2types/milestones): one mi
 
 ## Development
 
-Requires Node.js 22 (22.13 or later), 24, or 26 and later. CI tests on Node 22, 24 and 26, and deploys from 24 (`.nvmrc`).
+Requires Node.js 22 (22.19 or later, for Lighthouse), 24, or 26 and later. CI tests on Node 22, 24 and 26, and deploys from 24 (`.nvmrc`).
 
 ```sh
 npm ci           # install
@@ -45,8 +45,23 @@ npm run lighthouse  # Lighthouse on every page, phone and desktop: 95 or more in
 ```
 
 Adding a page means adding it to `build.rolldownOptions.input` in `vite.config.ts`, to `PAGES` in
-`scripts/check-dist.mjs` and to `public/sitemap.xml`, with a social image from
+`scripts/check-dist.mjs`, `scripts/lighthouse.mjs`, `e2e/accessibility.spec.ts` and
+`e2e/pages.spec.ts`, and to `public/sitemap.xml`, with a social image from
 `design/render-images.mjs`.
+
+### End-to-end tests and Lighthouse
+
+Both run against the build (`npm run build` first), served by `vite preview`, since the security
+policy is only in the build. They need Chromium: `npx playwright install chromium` once, or set
+`CHROMIUM_PATH` to a Chromium already on the machine.
+
+### Dependencies
+
+New versions wait a week before they're taken, as a buffer against a compromised release:
+Dependabot has a 7-day cooldown, and a new package is added with
+`npm install --before="$(date -u -d '-7 days' +%FT%TZ)" …` so its own dependencies are a week old
+too. `@playwright/test` is pinned exactly, and an npm override makes `@axe-core/playwright` use the
+same `playwright-core`, so the tests drive one Playwright.
 
 ## Deployment
 
