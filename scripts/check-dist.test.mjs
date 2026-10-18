@@ -64,6 +64,12 @@ describe('findProblems', () => {
     expect(problems).toEqual(['noscript.css: contains a data: URI']);
   });
 
+  it('flags a worker served as a file of its own', () => {
+    expect(
+      findProblems(site(page(), [{ name: 'assets/worker-abc123.js', text: 'onmessage=()=>{}' }])),
+    ).toEqual(["assets/worker-abc123.js: a worker served as its own file runs without the page's CSP"]);
+  });
+
   it('flags pages in subfolders too', () => {
     const problems = findProblems(
       site(page(), [{ name: 'csharp/index.html', text: '<meta charset="utf-8">' }]),

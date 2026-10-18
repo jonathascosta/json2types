@@ -80,6 +80,7 @@ class Diagnostics {
             : `${String(hidden.length)} more diagnostics not shown.`,
         // Here the count is of hidden diagnostics, not of occurrences.
         count: hidden.length,
+        summary: true,
       },
     ];
   }

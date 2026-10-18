@@ -503,6 +503,7 @@ describe('inferModel', () => {
       severity: 'info',
       message: '19900 more diagnostics not shown.',
       count: 19_900,
+      summary: true,
     });
     expect(performance.now() - start).toBeLessThan(5000);
   });
@@ -525,7 +526,9 @@ describe('inferModel', () => {
     expect(model.diagnostics[100]).toMatchObject({
       severity: 'info',
       message: '51 more diagnostics not shown.',
+      summary: true,
     });
+    expect(model.diagnostics.slice(0, 100).some((d) => d.summary)).toBe(false);
     const mixes = Array.from({ length: 150 }, (_, i) => `"m${String(i)}":[1,"a"]`).join(',');
     expect(infer(`{${mixes}}`).diagnostics[100]).toMatchObject({
       severity: 'warning',
