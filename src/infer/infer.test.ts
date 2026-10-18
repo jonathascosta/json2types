@@ -336,6 +336,7 @@ describe('inferModel', () => {
   it('warns about a long integer that ends up as floating point', () => {
     const model = infer(`{"x":[${'9'.repeat(400)}, 1.5]}`);
     expect(model.diagnostics.map((d) => d.message)).toEqual([
+      'An integer here is beyond ±2^53 and loses digits as floating point.',
       'A number here is too large even for floating point.',
     ]);
   });
@@ -478,6 +479,24 @@ describe('inferModel', () => {
       message: '50 more diagnostics not shown, 50 of them warnings.',
       count: 50,
     });
+  });
+
+  it('warns when an integer beyond 2^53 ends up as floating point', () => {
+    const model = infer('{"x":[9007199254740993, 1e300]}');
+    expect(property(model, 'Root', 'x')?.type).toEqual({ kind: 'array', items: plain({ kind: 'float' }) });
+    expect(model.diagnostics.map((d) => d.message)).toEqual([
+      'An integer here is beyond ±2^53 and loses digits as floating point.',
+    ]);
+    expect(infer('{"x":[9007199254740993, 1]}').diagnostics).toEqual([]);
+  });
+
+  it('lists thousands of deep diagnostics quickly', () => {
+    const fields = Array.from({ length: 20_000 }, (_, i) => `"f${String(i)}":[1,"a"]`).join(',');
+    const json = `${'{"level":'.repeat(400)}{${fields}}${'}'.repeat(400)}`;
+    const start = performance.now();
+    const model = infer(json);
+    expect(model.diagnostics).toHaveLength(101);
+    expect(performance.now() - start).toBeLessThan(5000);
   });
 
   it('shortens very deep paths in the middle', () => {

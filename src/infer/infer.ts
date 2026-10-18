@@ -63,12 +63,14 @@ class Diagnostics {
     const ordered = [
       ...this.entries.filter((e) => e.severity === 'warning'),
       ...this.entries.filter((e) => e.severity === 'info'),
-    ].map((e) => ({ ...e, path: shortPath(e.path) }));
-    if (ordered.length <= MAX_DIAGNOSTICS) return ordered;
+    ];
+    // Only the paths shown are shortened, so thousands of deep diagnostics cost nothing extra.
+    const shown = ordered.slice(0, MAX_DIAGNOSTICS).map((e) => ({ ...e, path: shortPath(e.path) }));
+    if (ordered.length <= MAX_DIAGNOSTICS) return shown;
     const hidden = ordered.slice(MAX_DIAGNOSTICS);
     const warnings = hidden.filter((e) => e.severity === 'warning').length;
     return [
-      ...ordered.slice(0, MAX_DIAGNOSTICS),
+      ...shown,
       {
         path: '$',
         severity: warnings > 0 ? 'warning' : 'info',
@@ -86,8 +88,12 @@ class Diagnostics {
 /** A path for display: very deep ones keep their start and their end. */
 function shortPath(path: string): string {
   if (path.length <= 300) return path;
-  const chars = Array.from(path);
-  return chars.length <= 300 ? path : `${chars.slice(0, 100).join('')}…${chars.slice(-200).join('')}`;
+  // Cut on code points without walking the whole string: step back or forward off a surrogate half.
+  let head = 100;
+  if (/[\uD800-\uDBFF]/.test(path.charAt(head - 1))) head--;
+  let tail = path.length - 200;
+  if (/[\uDC00-\uDFFF]/.test(path.charAt(tail))) tail++;
+  return `${path.slice(0, head)}…${path.slice(tail)}`;
 }
 
 // Phase 1: everything seen at each place in the JSON, merged into one shape.
@@ -119,6 +125,8 @@ interface NumberShape {
   decimal: boolean;
   /** Some value is infinite as a double (too large) or reads as 0 though it isn't (too small). */
   infinite: boolean;
+  /** Some integer is beyond ±2^53, where a double no longer holds every whole number exactly. */
+  unsafeInteger: boolean;
   underflows: boolean;
   /** Some value is beyond what an exact decimal holds (±79228162514264337593543950335). */
   beyondDecimal: boolean;
@@ -183,6 +191,7 @@ function temporalKind(value: string): 'date' | 'offset' | 'local' | null {
 
 const INT32 = 2n ** 31n;
 const INT64 = 2n ** 63n;
+const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 /** The largest magnitude System.Text.Json reads into a C# decimal. */
 const DECIMAL_MAX = 79228162514264337593543950335n;
 
@@ -218,24 +227,33 @@ function numberShape(raw: string): NumberShape {
   const asDouble = Number(raw);
   const infinite = !Number.isFinite(asDouble);
   const underflows = asDouble === 0 && /[1-9]/.test(raw.replace(/[eE].*$/, ''));
-  const integer = (bits: NumberShape['bits'], beyond = false): NumberShape => ({
+  const integer = (bits: NumberShape['bits'], beyond = false, unsafe = false): NumberShape => ({
     decimal: false,
     infinite,
     underflows,
+    unsafeInteger: unsafe,
     beyondDecimal: beyond,
     bits,
   });
   if (/[.eE]/.test(raw)) {
-    return { decimal: true, infinite, underflows, beyondDecimal: beyondDecimal(raw), bits: 32 };
+    return {
+      decimal: true,
+      infinite,
+      underflows,
+      unsafeInteger: false,
+      beyondDecimal: beyondDecimal(raw),
+      bits: 32,
+    };
   }
   // By digit count first, so a million-digit integer doesn't go through BigInt.
   const length = raw.replace(/^-/, '').length;
   if (length <= 9) return integer(32);
-  if (length > 29) return integer('big', true);
+  if (length > 29) return integer('big', true, true);
   const value = BigInt(raw);
+  const unsafe = value > MAX_SAFE || value < -MAX_SAFE;
   if (value >= -INT32 && value < INT32) return integer(32);
-  if (value >= -INT64 && value < INT64) return integer(64);
-  return integer('big', value > DECIMAL_MAX || value < -DECIMAL_MAX);
+  if (value >= -INT64 && value < INT64) return integer(64, false, unsafe);
+  return integer('big', value > DECIMAL_MAX || value < -DECIMAL_MAX, unsafe);
 }
 
 const widerBits = (a: NumberShape['bits'], b: NumberShape['bits']): NumberShape['bits'] =>
@@ -272,6 +290,7 @@ function addSample(shape: Shape, value: JsonValue, diagnostics: Diagnostics): vo
         ? {
             decimal: shape.numbers.decimal || seen.decimal,
             infinite: shape.numbers.infinite || seen.infinite,
+            unsafeInteger: shape.numbers.unsafeInteger || seen.unsafeInteger,
             underflows: shape.numbers.underflows || seen.underflows,
             beyondDecimal: shape.numbers.beyondDecimal || seen.beyondDecimal,
             bits: widerBits(shape.numbers.bits, seen.bits),
@@ -416,9 +435,16 @@ class Resolver {
       return { type, nullable };
     }
     if (shape.numbers) {
-      const { decimal, beyondDecimal, bits, infinite, underflows } = shape.numbers;
+      const { decimal, beyondDecimal, bits, infinite, underflows, unsafeInteger } = shape.numbers;
       if (!decimal) return { type: { kind: 'integer', bits }, nullable };
       // Only floating point loses these; integers of any size are kept whole.
+      if (beyondDecimal && unsafeInteger) {
+        this.diagnostics.add(
+          shape,
+          'warning',
+          'An integer here is beyond ±2^53 and loses digits as floating point.',
+        );
+      }
       if (beyondDecimal && infinite) {
         this.diagnostics.add(shape, 'warning', 'A number here is too large even for floating point.');
       }

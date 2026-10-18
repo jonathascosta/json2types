@@ -114,7 +114,7 @@ describe('parseJson', () => {
     ['-.5', 'Invalid number', 1, 1],
     ['-01', 'Invalid number', 1, 1],
     ['+1', "Expected a value, found '+'", 1, 1],
-    ['.5', "Expected a value, found '.'", 1, 1],
+    ['.5', 'Invalid number', 1, 1],
     ['{"a":}', "Expected a value, found '}'", 1, 6],
     ['[1,,2]', "Expected a value, found ','", 1, 4],
     ['0x1', 'Invalid number', 1, 1],
@@ -123,7 +123,8 @@ describe('parseJson', () => {
     ['[1, 1.5.2]', 'Invalid number', 1, 5],
     ['nul', 'Invalid literal: expected true, false or null', 1, 1],
     ['\uFEFF}', "Expected a value, found '}'", 1, 1],
-    ['truex', "Unexpected 'x' after the JSON value", 1, 5],
+    ['truex', 'Invalid literal: expected true, false or null', 1, 1],
+    ['[nullx]', 'Invalid literal: expected true, false or null', 1, 2],
     ['"ab\\', 'Unterminated string', 1, 1],
   ])('reports %j with its position', (text, message, line, column) => {
     const error = errorOf(text);

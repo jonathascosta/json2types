@@ -197,6 +197,8 @@ export function parseJson(text: string): JsonValue {
           ['null', { type: 'null' }],
         ] as const) {
           if (text.startsWith(word, pos)) {
+            // truex is one bad literal, not true followed by x.
+            if (/\w/.test(text[pos + word.length] ?? '')) break;
             pos += word.length;
             return value;
           }
@@ -207,7 +209,7 @@ export function parseJson(text: string): JsonValue {
         NUMBER.lastIndex = pos;
         const match = NUMBER.exec(text);
         if (!match) {
-          if (char === '-') return fail('Invalid number');
+          if (char === '-' || char === '.') return fail('Invalid number');
           return fail(`Expected a value, found ${describe(pos)}`);
         }
         pos += match[0].length;

@@ -150,7 +150,9 @@ const RESERVED = new Set([
 
 /** Appends Item to names that would shadow a common built-in type: String → StringItem. */
 export function avoidReserved(name: string): string {
-  return RESERVED.has(name) ? `${name}Item` : name;
+  // C# finds [JsonIgnore] as JsonIgnore or JsonIgnoreAttribute, so the long form is reserved too.
+  const stem = name.endsWith('Attribute') ? name.slice(0, -'Attribute'.length) : null;
+  return RESERVED.has(name) || (stem !== null && RESERVED.has(stem)) ? `${name}Item` : name;
 }
 
 /** Capitalises a word's first letter, unless that would change its length (ß → SS). */
@@ -254,6 +256,14 @@ const IRREGULAR = new Map(
     phenomena: 'phenomenon',
     axes: 'axis',
     apis: 'api',
+    tornadoes: 'tornado',
+    cactuses: 'cactus',
+    octopuses: 'octopus',
+    syllabuses: 'syllabus',
+    christmases: 'christmas',
+    busses: 'bus',
+    plusses: 'plus',
+    fezzes: 'fez',
     wifis: 'wifi',
     does: 'doe',
     tvs: 'tv',
@@ -384,6 +394,12 @@ const UNCOUNTABLE = new Set([
   'electronics',
   'logistics',
   'gymnastics',
+  'scissors',
+  'thanks',
+  'headquarters',
+  'crossroads',
+  'odds',
+  'pants',
 ]);
 
 /**
@@ -426,6 +442,8 @@ export function singular(name: string): string {
   // A short acronym folded to lower case by pascalCase: Gps, Sms, Dns, Cms.
   if (/^[^aeiouy]+s$/.test(lower)) return `${name}Item`;
   if (/[^aeiou]ies$/.test(lower)) return restore(`${lower.slice(0, -3)}y`);
+  // Plateaus, Bureaus.
+  if (lower.endsWith('eaus')) return restore(lower.slice(0, -1));
   // Boxes, Addresses, Wishes, Buzzes, Matches, Speeches; the -che words are in IRREGULAR.
   if (/(?:ss|x|sh|zz|ch)es$/.test(lower)) return restore(lower.slice(0, -2));
   // Not plurals: Analysis, Class, Status, Bus; the plurals among -us words (Menus) are in IRREGULAR.
