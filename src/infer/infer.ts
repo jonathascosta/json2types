@@ -85,6 +85,17 @@ class Diagnostics {
   }
 }
 
+/** `a`, flagged unsafe wherever `b`, the same type but for the flags, is. */
+function withUnsafe(a: TypeRef, b: TypeRef): TypeRef {
+  if (a.kind === 'array' && b.kind === 'array') {
+    return { ...a, items: { ...a.items, type: withUnsafe(a.items.type, b.items.type) } };
+  }
+  const unsafe = 'unsafe' in b && b.unsafe === true;
+  return unsafe && (a.kind === 'integer' || a.kind === 'decimal' || a.kind === 'float')
+    ? { ...a, unsafe }
+    : a;
+}
+
 /** A path for display: very deep ones keep their start and their end. */
 function shortPath(path: string): string {
   if (path.length <= 300) return path;
@@ -127,6 +138,8 @@ interface NumberShape {
   infinite: boolean;
   /** Some integer is beyond ±2^53, where a double no longer holds every whole number exactly. */
   unsafeInteger: boolean;
+  /** Some value, integer or not, is beyond ±2^53, so a double may not keep all its digits. */
+  beyondSafe: boolean;
   underflows: boolean;
   /** Some value is beyond what an exact decimal holds (±79228162514264337593543950335). */
   beyondDecimal: boolean;
@@ -233,6 +246,7 @@ function numberShape(raw: string): NumberShape {
     infinite,
     underflows,
     unsafeInteger: unsafe,
+    beyondSafe: unsafe,
     beyondDecimal: beyond,
     bits,
   });
@@ -242,6 +256,7 @@ function numberShape(raw: string): NumberShape {
       infinite,
       underflows,
       unsafeInteger: false,
+      beyondSafe: !(Math.abs(asDouble) <= Number.MAX_SAFE_INTEGER),
       beyondDecimal: beyondDecimal(raw),
       bits: 32,
     };
@@ -293,6 +308,7 @@ function addSample(shape: Shape, value: JsonValue, diagnostics: Diagnostics): vo
             decimal: shape.numbers.decimal || seen.decimal,
             infinite: shape.numbers.infinite || seen.infinite,
             unsafeInteger: shape.numbers.unsafeInteger || seen.unsafeInteger,
+            beyondSafe: shape.numbers.beyondSafe || seen.beyondSafe,
             underflows: shape.numbers.underflows || seen.underflows,
             beyondDecimal: shape.numbers.beyondDecimal || seen.beyondDecimal,
             bits: widerBits(shape.numbers.bits, seen.bits),
@@ -437,8 +453,10 @@ class Resolver {
       return { type, nullable };
     }
     if (shape.numbers) {
-      const { decimal, beyondDecimal, bits, infinite, underflows, unsafeInteger } = shape.numbers;
-      if (!decimal) return { type: { kind: 'integer', bits }, nullable };
+      const { decimal, beyondDecimal, bits, infinite, underflows, unsafeInteger, beyondSafe } = shape.numbers;
+      // Set only when true, so most types read as before.
+      const unsafe = beyondSafe ? { unsafe: true as const } : {};
+      if (!decimal) return { type: { kind: 'integer', bits, ...unsafe }, nullable };
       // Only floating point loses these; integers of any size are kept whole.
       if (beyondDecimal && unsafeInteger) {
         this.diagnostics.add(
@@ -457,7 +475,7 @@ class Resolver {
           'A number here is too small even for floating point; it reads as 0.',
         );
       }
-      return { type: { kind: beyondDecimal ? 'float' : 'decimal' }, nullable };
+      return { type: { kind: beyondDecimal ? 'float' : 'decimal', ...unsafe }, nullable };
     }
     if (shape.object) return { type: this.collect(shape.object, nameHint), nullable };
     if (shape.array) {
@@ -483,11 +501,29 @@ class Resolver {
     // Only objects with the same name hint are shared (billing.address and shipping.address), so a
     // user and a product that both happen to be {"id": …} keep their own types. Property order
     // doesn't matter; the first type found keeps its own. Empty objects are shared by hint alone.
+    // Whether some numbers are beyond ±2^53 doesn't make a type of its own: the shared one keeps
+    // the flag if either has it.
     const sorted = [...properties].sort((a, b) => compare(a.jsonName, b.jsonName));
     const structure =
-      properties.length === 0 ? JSON.stringify([nameHint, 'empty']) : JSON.stringify([nameHint, sorted]);
+      properties.length === 0
+        ? JSON.stringify([nameHint, 'empty'])
+        : JSON.stringify([nameHint, sorted], (key, value: unknown) => (key === 'unsafe' ? undefined : value));
     const existing = this.byStructure.get(structure);
-    if (existing) return { kind: 'object', name: existing };
+    if (existing) {
+      const index = Number(existing.slice(1));
+      const shared = this.pending[index];
+      if (shared) {
+        const own = new Map(properties.map((p) => [p.jsonName, p]));
+        this.pending[index] = {
+          ...shared,
+          properties: shared.properties.map((p) => {
+            const other = own.get(p.jsonName);
+            return other ? { ...p, type: withUnsafe(p.type, other.type) } : p;
+          }),
+        };
+      }
+      return { kind: 'object', name: existing };
+    }
 
     const id = `#${String(this.pending.length)}`;
     this.pending.push({ hint: nameHint, properties });

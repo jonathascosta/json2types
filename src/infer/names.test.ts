@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { avoidReserved, singular, typeName } from './names';
+import { avoidReserved, isStableName, singular, typeName } from './names';
 
 describe('typeName', () => {
   it.each([
@@ -17,7 +17,18 @@ describe('typeName', () => {
     ['café', 'Café'],
     ['x²', 'X'],
     ['½price', 'Price'],
-    ['Ⅻ', 'Ⅻ'],
+    ['Ⅻ', 'Item'],
+    ['new\u0C5C\uA7CBname', 'NewName'],
+    ['\u0928\u093E\u092E', 'Item'],
+    ['日本語', '日本語'],
+    ['имя', 'Имя'],
+    ['όνομα', 'Όνομα'],
+    // Vietnamese and polytonic Greek, composed (NFC) or not.
+    ['ti\u1EBFng vi\u1EC7t', 'Ti\u1EBFngVi\u1EC7t'],
+    ['tie\u0302\u0301ng vie\u0323\u0302t', 'Ti\u1EBFngVi\u1EC7t'],
+    ['\u1F00\u03C1\u03C7\u03AE', '\u1F08\u03C1\u03C7\u03AE'],
+    // A change of case that would leave the stable letters is skipped.
+    ['\u023Fx', '\u023Fx'],
     ['HOME_ADDRESS', 'HomeAddress'],
     ['USER_ID', 'UserID'],
     ['b\u20ddc', 'BC'],
@@ -57,6 +68,12 @@ describe('typeName', () => {
       '𠀀x',
       '𝑥y',
       '\u0301abc',
+      'x\u0C5C',
+      '\uA7CB',
+      'ไทย',
+      '\u023Fx',
+      '\u023A\u023A\u023A',
+      'ti\u1EBFng vi\u1EC7t',
     ];
     for (const key of keys) {
       const name = typeName(key);
@@ -66,6 +83,8 @@ describe('typeName', () => {
       expect(name).toMatch(/^\p{ID_Start}\p{ID_Continue}*$/u);
       // C# reads identifiers one UTF-16 unit at a time: no surrogate pairs (CS1056).
       expect(name).not.toMatch(/[\u{10000}-\u{10FFFF}]/u);
+      // Only characters every compiler's Unicode tables know.
+      expect(isStableName(name)).toBe(true);
     }
   });
 });

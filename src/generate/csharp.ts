@@ -5,6 +5,7 @@
  * or later for DateOnly.
  */
 import type { Model, ObjectDeclaration, Property, PropertyType, TypeRef } from '../infer';
+import { INVISIBLE_SOURCE, unicodeEscape } from './escape';
 
 export interface CSharpOptions {
   /** `record` gives `{ get; init; }` properties, `class` gives `{ get; set; }`. Default: class. */
@@ -236,12 +237,14 @@ export function namespaceName(input: string): string {
  * surrogates; C# also ends lines at U+0085, U+2028 and U+2029.
  */
 export function stringLiteral(value: string): string {
-  const escaped = value.replace(
-    /["\\]|[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/gu,
-    (c) =>
-      c === '"' || c === '\\'
-        ? `\\${c}`
-        : `\\u${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`,
+  const escaped = value.replace(LITERAL_ESCAPES, (c) =>
+    c === '"' || c === '\\' ? `\\${c}` : unicodeEscape(c, true),
   );
   return `"${escaped}"`;
 }
+
+/** Quotes and backslashes, what can't be seen, and lone surrogates. */
+const LITERAL_ESCAPES = new RegExp(
+  `["\\\\]|${INVISIBLE_SOURCE}|[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])|(?<![\\uD800-\\uDBFF])[\\uDC00-\\uDFFF]`,
+  'gu',
+);

@@ -29,7 +29,10 @@ export default defineConfig({
     projects: [
       {
         extends: true,
-        test: { name: 'unit', include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs'] },
+        test: {
+          name: 'unit',
+          include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs', 'scripts/**/*.tsc.test.ts'],
+        },
       },
       {
         // Needs the .NET SDK and takes a while: `npm run test:dotnet`.

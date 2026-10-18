@@ -80,12 +80,54 @@ describe('inferModel', () => {
     const items = (json: string) => (infer(json).root.type as { items: { type: unknown } }).items.type;
     expect(items('[2147483647, -2147483648]')).toEqual({ kind: 'integer', bits: 32 });
     expect(items('[1, 2147483648]')).toEqual({ kind: 'integer', bits: 64 });
-    expect(items('[1, -9223372036854775808]')).toEqual({ kind: 'integer', bits: 64 });
-    expect(items('[1, 9223372036854775808]')).toEqual({ kind: 'integer', bits: 128 });
-    expect(items('[1, -170141183460469231731687303715884105728]')).toEqual({ kind: 'integer', bits: 128 });
-    expect(items('[1, 170141183460469231731687303715884105727]')).toEqual({ kind: 'integer', bits: 128 });
-    expect(items('[1, 170141183460469231731687303715884105728]')).toEqual({ kind: 'integer', bits: 'big' });
-    expect(items('[2147483648, 9223372036854775808, 1]')).toEqual({ kind: 'integer', bits: 128 });
+    const unsafe = true;
+    expect(items('[1, -9223372036854775808]')).toEqual({ kind: 'integer', bits: 64, unsafe });
+    expect(items('[1, 9223372036854775808]')).toEqual({ kind: 'integer', bits: 128, unsafe });
+    expect(items('[1, -170141183460469231731687303715884105728]')).toEqual({
+      kind: 'integer',
+      bits: 128,
+      unsafe,
+    });
+    expect(items('[1, 170141183460469231731687303715884105727]')).toEqual({
+      kind: 'integer',
+      bits: 128,
+      unsafe,
+    });
+    expect(items('[1, 170141183460469231731687303715884105728]')).toEqual({
+      kind: 'integer',
+      bits: 'big',
+      unsafe,
+    });
+    expect(items('[2147483648, 9223372036854775808, 1]')).toEqual({ kind: 'integer', bits: 128, unsafe });
+  });
+
+  it('marks any number beyond ±2^53, of which a JavaScript number may lose digits', () => {
+    const items = (json: string) => (infer(json).root.type as { items: { type: unknown } }).items.type;
+    expect(items('[0.5, 9007199254740991]')).toEqual({ kind: 'decimal' });
+    expect(items('[0.5, 9007199254740993]')).toEqual({ kind: 'decimal', unsafe: true });
+    expect(items('[9007199254740993.0]')).toEqual({ kind: 'decimal', unsafe: true });
+    expect(items('[12345678901234567891e0]')).toEqual({ kind: 'decimal', unsafe: true });
+    expect(items('[1e400, 2.5]')).toEqual({ kind: 'float', unsafe: true });
+    expect(items('[-1e300, 2.5]')).toEqual({ kind: 'float', unsafe: true });
+    expect(items('[1e-300, 2.5]')).toEqual({ kind: 'float' });
+  });
+
+  it('shares a type between places whose numbers differ only in being beyond ±2^53', () => {
+    const model = infer(
+      '{"billing":{"address":{"n":[4294967296]}},"shipping":{"address":{"n":[9007199254740993]}}}',
+    );
+    expect(model.declarations.map((d) => d.name)).toEqual(['Root', 'Billing', 'Shipping', 'Address']);
+    expect(property(model, 'Address', 'n')?.type).toEqual({
+      kind: 'array',
+      items: plain({ kind: 'integer', bits: 64, unsafe: true }),
+    });
+  });
+
+  it('marks integers beyond ±2^53, which a JavaScript number skips some of', () => {
+    const items = (json: string) => (infer(json).root.type as { items: { type: unknown } }).items.type;
+    expect(items('[9007199254740991, -9007199254740991]')).toEqual({ kind: 'integer', bits: 64 });
+    expect(items('[1, 9007199254740992]')).toEqual({ kind: 'integer', bits: 64, unsafe: true });
+    expect(items('[-9007199254740992, 1]')).toEqual({ kind: 'integer', bits: 64, unsafe: true });
   });
 
   it('recognises strings that are always dates, date-times or GUIDs', () => {
@@ -160,7 +202,11 @@ describe('inferModel', () => {
   });
 
   it('uses floating point when a fractional number is beyond an exact decimal', () => {
-    const items = (json: string) => (infer(json).root.type as { items: { type: unknown } }).items.type;
+    // Only the kind matters here; whether values are beyond ±2^53 is tested on its own.
+    const items = (json: string) => {
+      const { kind } = (infer(json).root.type as { items: { type: { kind: string } } }).items.type;
+      return { kind };
+    };
     expect(items('[1.5, 79228162514264337593543950335.0]')).toEqual({ kind: 'decimal' });
     expect(items('[1.5, 7.9e28, -7.9e28, 1e-28, 0.0000000000000000000000000001]')).toEqual({
       kind: 'decimal',
@@ -315,7 +361,7 @@ describe('inferModel', () => {
     const start = performance.now();
     expect(infer(`[${huge}, ${huge}, ${huge}]`).root.type).toEqual({
       kind: 'array',
-      items: plain({ kind: 'integer', bits: 'big' }),
+      items: plain({ kind: 'integer', bits: 'big', unsafe: true }),
     });
     expect(performance.now() - start).toBeLessThan(3000);
   });
@@ -332,7 +378,7 @@ describe('inferModel', () => {
     const model = infer(`{"x":[${'9'.repeat(400)}, 1]}`);
     expect(property(model, 'Root', 'x')?.type).toEqual({
       kind: 'array',
-      items: plain({ kind: 'integer', bits: 'big' }),
+      items: plain({ kind: 'integer', bits: 'big', unsafe: true }),
     });
     expect(model.diagnostics).toEqual([]);
   });
@@ -347,7 +393,10 @@ describe('inferModel', () => {
 
   it('warns about numbers too large even for floating point', () => {
     const model = infer('{"x":[1e400, 1.5]}');
-    expect(property(model, 'Root', 'x')?.type).toEqual({ kind: 'array', items: plain({ kind: 'float' }) });
+    expect(property(model, 'Root', 'x')?.type).toEqual({
+      kind: 'array',
+      items: plain({ kind: 'float', unsafe: true }),
+    });
     expect(model.diagnostics).toEqual([
       {
         path: '$.x[*]',
@@ -487,7 +536,10 @@ describe('inferModel', () => {
 
   it('warns when an integer beyond 2^53 ends up as floating point', () => {
     const model = infer('{"x":[9007199254740993, 1e300]}');
-    expect(property(model, 'Root', 'x')?.type).toEqual({ kind: 'array', items: plain({ kind: 'float' }) });
+    expect(property(model, 'Root', 'x')?.type).toEqual({
+      kind: 'array',
+      items: plain({ kind: 'float', unsafe: true }),
+    });
     expect(model.diagnostics.map((d) => d.message)).toEqual([
       'An integer here is beyond ±2^53 and loses digits as floating point.',
     ]);

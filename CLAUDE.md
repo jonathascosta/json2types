@@ -35,7 +35,7 @@ of the owner's.
    owner's approval on each pull request.
 
    In this project, pull requests go in automatically (the owner's call, 18 October 2026): merge
-   each one as soon as its CI passes.
+   each one as soon as its CI passes, then go straight on to the next story of the sprint.
 
 Priorities: **P0** breaks the product, loses data or is a security problem; **P1** is a real bug
 or a clear gap in what the task asked for; **P2** is a minor issue that is worth fixing now;
