@@ -21,11 +21,12 @@ of the owner's.
 
    Report what they find in this table:
 
-   | Priority | Short description | Resolved | How to resolve |
-   | --- | --- | --- | --- |
-   | P0, P1 or P2 | … | Yes / No | … |
+   | Priority     | Short description | Resolved | How to resolve |
+   | ------------ | ----------------- | -------- | -------------- |
+   | P0, P1 or P2 | …                 | Yes / No | …              |
 
    After presenting the table, if any finding is still unresolved, go back to step 1.
+
 5. **Open a pull request**, with the timings and the review table in its description. Merge it
    only if the owner has said that pull requests go in automatically; otherwise wait for the
    owner's approval on each pull request.
