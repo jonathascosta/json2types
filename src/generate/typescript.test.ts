@@ -9,7 +9,7 @@ function typescript(json: string, options: TypeScriptOptions = {}, rootName?: st
 const lines = (...text: string[]) => text.join('\n') + '\n';
 
 const UNSAFE =
-  "Some numbers here are beyond ±2^53, where JSON.parse may lose digits: to keep them exact, read them as strings or with a reviver's context.source.";
+  'Some numbers here are beyond ±2^53, where JSON.parse may lose digits: to keep them exact, send them as strings or use a JSON parser that keeps big numbers.';
 
 const SAMPLE =
   '[{"id": 7, "first-name": "Ana", "tags": ["a", null], "address": {"city": "Porto"}}, {"id": 8, "first-name": null, "tags": []}]';
@@ -200,6 +200,11 @@ describe('propertyName', () => {
     ['\u3164', '"\\u3164"'],
     ['a\u{E0041}b', '"a\\udb40\\udc41b"'],
     ['\uD800', '"\\ud800"'],
+    // C1 controls, variation selectors, the grapheme joiner and the braille blank, which
+    // JSON.stringify leaves as they are.
+    ['a\u0085b\u007F', '"a\\u0085b\\u007f"'],
+    ['a\uFE0Fb\u{E0100}', '"a\\ufe0fb\\udb40\\udd00"'],
+    ['a\u034Fb\u2800', '"a\\u034fb\\u2800"'],
   ])('%j → %s', (name, expected) => {
     expect(propertyName(name)).toBe(expected);
   });

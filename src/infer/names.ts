@@ -165,22 +165,37 @@ function capitalise(word: string): string {
 }
 
 /**
- * Letters and marks every C# and TypeScript compiler knows, whatever its Unicode version: ASCII
- * letters and digits, and long-established blocks (Latin with accents, Greek, Cyrillic, Hebrew,
- * Arabic, Thai, kana, the core CJK ideographs, Hangul syllables), all in Unicode since 1.1. A letter
- * added since (U+0C5C, U+A7CB) is valid in this browser but may be an error for the compiler
- * (CS1056, TS1127), so it separates words instead.
+ * Characters outside the letters and marks every C# and TypeScript compiler knows, whatever its
+ * Unicode version: ASCII letters and digits, and long-established blocks (Latin with accents and
+ * Vietnamese, Greek and polytonic Greek, Cyrillic, Hebrew, Arabic, Thai, kana, the core CJK
+ * ideographs, Hangul syllables), in Unicode since 1.1 or soon after and all accepted by
+ * TypeScript's oldest (ES5) identifier tables. A letter added later (U+0C5C, U+A7CB) is valid in
+ * this browser but may be an error for the compiler (CS1056, TS1127), so it separates words.
  */
-const STABLE =
-  // The ranges are of single code points; combining marks among them are meant.
-  // eslint-disable-next-line no-misleading-character-class
-  /[^0-9A-Za-z\u00C0-\u024F\u0300-\u036F\u0386-\u03CE\u0400-\u045F\u05D0-\u05EA\u0621-\u0652\u0E01-\u0E4E\u3041-\u3094\u30A1-\u30FA\u4E00-\u9FA5\uAC00-\uD7A3]/gu;
+const UNSTABLE_SOURCE =
+  '[^0-9A-Za-z\\u00C0-\\u024F\\u0300-\\u036F\\u0386-\\u03CE\\u0400-\\u045F\\u05D0-\\u05EA\\u0621-\\u0652\\u0E01-\\u0E4E' +
+  '\\u1E00-\\u1EFF\\u1F00-\\u1FFF\\u3041-\\u3094\\u30A1-\\u30FA\\u4E00-\\u9FA5\\uAC00-\\uD7A3]';
+// The ranges are of single code points; the combining marks among them are meant.
+/* eslint-disable no-misleading-character-class */
+const UNSTABLE = new RegExp(UNSTABLE_SOURCE, 'gu');
+const HAS_UNSTABLE = new RegExp(UNSTABLE_SOURCE, 'u');
+/* eslint-enable no-misleading-character-class */
+
+/** Whether every character of a name is one every compiler knows; for tests. */
+export function isStableName(name: string): boolean {
+  return !HAS_UNSTABLE.test(name);
+}
+
+/** A change of case, unless it leaves the stable letters (ȿ capitalises to U+2C7E, Unicode 5.2). */
+function stableCase(word: string, changed: string): string {
+  return HAS_UNSTABLE.test(changed) ? word : changed;
+}
 
 /**
  * Turns any JSON key into PascalCase words: "home address" → HomeAddress, "HOME_ADDRESS" →
  * HomeAddress, "2fa" → Item2fa. Words are runs of characters valid in identifiers in both
  * languages (letters, Mn and Mc marks, decimal digits, all within ECMAScript's ID_Continue) and in
- * the STABLE blocks; everything else separates them, so the result is a valid identifier in C# and
+ * the stable blocks (UNSTABLE_SOURCE); everything else separates them, so the result is a valid identifier in C# and
  * TypeScript for any compiler.
  */
 export function pascalCase(key: string): string {
@@ -192,7 +207,7 @@ export function pascalCase(key: string): string {
     .replace(/[\u{10000}-\u{10FFFF}]/gu, ' ')
     .replace(/[^\p{L}\p{Mn}\p{Mc}\p{Nd}\p{Nl}]/gu, ' ')
     .replace(/\P{ID_Continue}/gu, ' ')
-    .replace(STABLE, ' ');
+    .replace(UNSTABLE, ' ');
   const words = separated
     .replace(/([\p{Ll}\p{Nd}])(\p{Lu})/gu, '$1 $2')
     .split(' ')
@@ -201,11 +216,15 @@ export function pascalCase(key: string): string {
     .filter((word) => word !== '')
     // Words in capitals longer than an acronym read as ordinary words: HOME → Home, but ID stays.
     .map((word) =>
-      word.length > 2 && word === word.toUpperCase() && /\p{Lu}/u.test(word) ? word.toLowerCase() : word,
+      word.length > 2 && word === word.toUpperCase() && /\p{Lu}/u.test(word)
+        ? stableCase(word, word.toLowerCase())
+        : word,
     );
   // C# rejects identifiers over 511 characters (CS0645); 100 is plenty, and numbering keeps names
   // that meet after the cut apart.
-  const name = Array.from(words.map(capitalise).join('')).slice(0, 100).join('');
+  const name = Array.from(words.map((word) => stableCase(word, capitalise(word))).join(''))
+    .slice(0, 100)
+    .join('');
   if (name === '') return 'Item';
   return /^\p{Nd}/u.test(name) ? `Item${name}` : name;
 }

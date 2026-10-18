@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { avoidReserved, singular, typeName } from './names';
+import { avoidReserved, isStableName, singular, typeName } from './names';
 
 describe('typeName', () => {
   it.each([
@@ -23,6 +23,12 @@ describe('typeName', () => {
     ['日本語', '日本語'],
     ['имя', 'Имя'],
     ['όνομα', 'Όνομα'],
+    // Vietnamese and polytonic Greek, composed (NFC) or not.
+    ['ti\u1EBFng vi\u1EC7t', 'Ti\u1EBFngVi\u1EC7t'],
+    ['tie\u0302\u0301ng vie\u0323\u0302t', 'Ti\u1EBFngVi\u1EC7t'],
+    ['\u1F00\u03C1\u03C7\u03AE', '\u1F08\u03C1\u03C7\u03AE'],
+    // A change of case that would leave the stable letters is skipped.
+    ['\u023Fx', '\u023Fx'],
     ['HOME_ADDRESS', 'HomeAddress'],
     ['USER_ID', 'UserID'],
     ['b\u20ddc', 'BC'],
@@ -65,6 +71,9 @@ describe('typeName', () => {
       'x\u0C5C',
       '\uA7CB',
       'ไทย',
+      '\u023Fx',
+      '\u023A\u023A\u023A',
+      'ti\u1EBFng vi\u1EC7t',
     ];
     for (const key of keys) {
       const name = typeName(key);
@@ -75,10 +84,7 @@ describe('typeName', () => {
       // C# reads identifiers one UTF-16 unit at a time: no surrogate pairs (CS1056).
       expect(name).not.toMatch(/[\u{10000}-\u{10FFFF}]/u);
       // Only characters every compiler's Unicode tables know.
-      expect(name).toMatch(
-        // eslint-disable-next-line no-misleading-character-class -- ranges of single code points
-        /^[0-9A-Za-z\u00C0-\u024F\u0300-\u036F\u0386-\u03CE\u0400-\u045F\u05D0-\u05EA\u0621-\u0652\u0E01-\u0E4E\u3041-\u3094\u30A1-\u30FA\u4E00-\u9FA5\uAC00-\uD7A3]+$/u,
-      );
+      expect(isStableName(name)).toBe(true);
     }
   });
 });

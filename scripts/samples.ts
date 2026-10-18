@@ -86,6 +86,10 @@ export const SAMPLES: Record<string, string> = {
     'flag\u{E0067}\u{E0062}': 'tag characters',
     'new\u0C5C\uA7CB': 'letters newer than some Unicode tables',
     'nb\u00A0sp': 'no-break space',
+    'ti\u1EBFng vi\u1EC7t': 'Vietnamese',
+    '\u1F00\u03C1\u03C7\u03AE': 'polytonic Greek',
+    '\u023Fx': 'capitalises beyond the stable letters',
+    'a\uFE0Fb\u0085': 'invisible',
   }),
   // As text: in a JavaScript object literal __proto__ would set the prototype instead.
   proto: '{"__proto__": {"a": 1}, "b": 2}',

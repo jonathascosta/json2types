@@ -297,6 +297,10 @@ describe('stringLiteral', () => {
     expect(stringLiteral('a b\u00A0c\u3000d\u3164')).toBe('"a b\\u00A0c\\u3000d\\u3164"');
   });
 
+  it('escapes variation selectors, the grapheme joiner and the braille blank', () => {
+    expect(stringLiteral('a\uFE0Fb\u034Fc\u2800')).toBe('"a\\uFE0Fb\\u034Fc\\u2800"');
+  });
+
   it('escapes lone surrogates and keeps pairs', () => {
     expect(stringLiteral('\uD800x\uDC00😀')).toBe('"\\uD800x\\uDC00😀"');
     expect(stringLiteral('\uD83D')).toBe('"\\uD83D"');

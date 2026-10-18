@@ -4,7 +4,9 @@
  * globals of the same name (a script's `interface Image` would add to the DOM's).
  */
 import type { Model, ObjectDeclaration, Property, PropertyType, TypeRef } from '../infer';
-import { unicodeEscape } from './escape';
+import { INVISIBLE_SOURCE, unicodeEscape } from './escape';
+
+const INVISIBLE = new RegExp(INVISIBLE_SOURCE, 'gu');
 
 export interface TypeScriptOptions {
   /** `interface Root { … }` or `type Root = { … };`. Default: interface. */
@@ -28,7 +30,7 @@ type Settings = Required<TypeScriptOptions>;
 
 /** Above a member with numbers a JavaScript number may not hold exactly. */
 const UNSAFE =
-  "Some numbers here are beyond ±2^53, where JSON.parse may lose digits: to keep them exact, read them as strings or with a reviver's context.source.";
+  'Some numbers here are beyond ±2^53, where JSON.parse may lose digits: to keep them exact, send them as strings or use a JSON parser that keeps big numbers.';
 
 class Writer {
   /** Set when a type just written holds numbers beyond ±2^53. */
@@ -121,10 +123,7 @@ class Writer {
  */
 export function propertyName(name: string): string {
   if (/^[A-Za-z_$][\w$]*$/.test(name)) return name;
-  // JSON.stringify escapes quotes, backslashes, control characters and lone surrogates. Escape what
-  // can't be seen too (format characters, separators other than the space, Hangul fillers), so the
-  // name reads as what it is.
-  return JSON.stringify(name).replace(/(?! )[\p{Cf}\p{Z}\u115F\u1160\u3164\uFFA0]/gu, (c) =>
-    unicodeEscape(c),
-  );
+  // JSON.stringify escapes quotes, backslashes, C0 controls and lone surrogates; escape the rest of
+  // what can't be seen too, so the name reads as what it is.
+  return JSON.stringify(name).replace(INVISIBLE, (c) => unicodeEscape(c));
 }
