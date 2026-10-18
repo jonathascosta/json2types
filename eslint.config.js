@@ -15,4 +15,10 @@ export default defineConfig(
       },
     },
   },
+  {
+    // TypeScript checks the JavaScript files too (checkJs), so ESLint's own undefined-name rule
+    // only gets in the way: it doesn't know Node's globals.
+    files: ['**/*.{js,mjs}'],
+    rules: { 'no-undef': 'off' },
+  },
 );
