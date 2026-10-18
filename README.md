@@ -7,3 +7,22 @@ Live at [json2types.jonathas.net](https://json2types.jonathas.net) (coming soon)
 
 Planning lives in this repository's [issues](https://github.com/jonathascosta/json2types/issues)
 and [milestones](https://github.com/jonathascosta/json2types/milestones): one milestone per sprint.
+
+## Development
+
+Requires Node.js 22.13 or later (see `.nvmrc`).
+
+```sh
+npm ci           # install
+npm run dev      # local server with live reload
+npm test         # unit tests
+npm run lint     # ESLint and Prettier
+npm run build    # type-check and build to dist/
+```
+
+## Deployment
+
+Every pull request is linted, tested and built by GitHub Actions; every push to `main` is also
+deployed to GitHub Pages. One-time setup, in the repository's **Settings → Pages**: set the source to
+**GitHub Actions**, the custom domain to `json2types.jonathas.net`, and turn on **Enforce HTTPS**.
+The DNS record is a CNAME from `json2types` to `jonathascosta.github.io`.

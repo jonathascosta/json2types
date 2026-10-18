@@ -1,4 +1,4 @@
-import { versionLabel } from './version';
+const statusLine = document.getElementById('status');
+if (statusLine) statusLine.textContent = `Coming soon · v${__APP_VERSION__}`;
 
-const status = document.getElementById('status');
-if (status) status.textContent = `Coming soon · ${versionLabel(__APP_VERSION__)}`;
+export {};
