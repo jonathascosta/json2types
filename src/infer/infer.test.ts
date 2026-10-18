@@ -369,6 +369,8 @@ describe('inferModel', () => {
       'A3',
       'A2',
     ]);
+    const user = infer('{"user":{"user":1,"userValue":2}}');
+    expect(declaration(user, 'User')?.properties.map((p) => p.name)).toEqual(['UserValue2', 'UserValue']);
   });
 
   it('names thousands of clashing members in linear time', () => {
@@ -382,6 +384,24 @@ describe('inferModel', () => {
     const names = declaration(infer(json), 'Root')?.properties.map((p) => p.name) ?? [];
     expect(new Set(names).size).toBe(20_000);
     expect(performance.now() - start).toBeLessThan(5000);
+  });
+
+  it('names a megabyte-long key of capitals quickly', () => {
+    const key = JSON.stringify(`${'A'.repeat(1_000_000)}b`);
+    const start = performance.now();
+    const model = infer(`{${key}:[{"x":1}],${key.slice(0, -2)}s":[{"y":1}]}`);
+    expect(model.declarations).toHaveLength(3);
+    expect(performance.now() - start).toBeLessThan(5000);
+  });
+
+  it('keeps long keys short in diagnostic paths and messages', () => {
+    const key = 'k'.repeat(100);
+    const model = infer(`{"${key}":[{"a":1,"a":2}]}`);
+    expect(model.diagnostics[0]?.path).toBe(`$["${'k'.repeat(40)}…"][*].a`);
+    const nested = infer(`{"${key}":{"${key}":1,"${key}":2}}`);
+    expect(nested.diagnostics[0]?.message).toBe(
+      `The key "${'k'.repeat(40)}…" appears more than once in the same object; the last value is used.`,
+    );
   });
 
   it('reports repeated keys under a very long path quickly', () => {

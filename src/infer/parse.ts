@@ -64,15 +64,18 @@ export function parseJson(text: string): JsonValue {
         lineStart = i + 1;
       }
     }
-    throw new JsonParseError(message, line, at - lineStart + 1, at);
+    // A byte order mark isn't a column anyone sees.
+    const bom = line === 1 && text.charCodeAt(0) === 0xfeff ? 1 : 0;
+    throw new JsonParseError(message, line, at - lineStart + 1 - bom, at);
   };
 
   const describe = (at: number): string => {
     const code = text.codePointAt(at);
     if (code === undefined) return 'the end of the input';
     const char = String.fromCodePoint(code);
-    // Invisible characters by their code point, so "found ' '" never hides a non-breaking space.
-    if (/[\s\p{C}\p{Z}]/u.test(char)) {
+    // Invisible characters, and the quote itself, by their code point, so "found ' '" never hides a
+    // non-breaking space and "found '''" never happens.
+    if (/[\s\p{C}\p{Z}']/u.test(char)) {
       return `U+${code.toString(16).toUpperCase().padStart(4, '0')}`;
     }
     return `'${char}'`;
@@ -196,7 +199,7 @@ export function parseJson(text: string): JsonValue {
             return value;
           }
         }
-        return fail(`Unexpected ${describe(pos)}`);
+        return fail('Invalid literal: expected true, false or null');
       }
       default: {
         NUMBER.lastIndex = pos;

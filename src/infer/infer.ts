@@ -268,7 +268,7 @@ function addSample(shape: Shape, value: JsonValue, diagnostics: Diagnostics): vo
           diagnostics.add(
             fieldFor(key),
             'warning',
-            `The key ${JSON.stringify(key)} appears more than once in the same object; the last value is used.`,
+            `The key ${JSON.stringify(shownKey(key))} appears more than once in the same object; the last value is used.`,
           );
         }
         fields.set(key, fieldValue);
@@ -279,9 +279,15 @@ function addSample(shape: Shape, value: JsonValue, diagnostics: Diagnostics): vo
   }
 }
 
+/** A key as shown in paths and messages: long ones are cut short, so deep paths stay readable. */
+function shownKey(key: string): string {
+  return key.length > 40 ? `${key.slice(0, 40)}…` : key;
+}
+
 /** RFC 9535 JSONPath: dot notation for simple names, brackets for the rest. */
 function propertyPath(path: string, key: string): string {
-  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? `${path}.${key}` : `${path}[${JSON.stringify(key)}]`;
+  const shown = shownKey(key);
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(shown) ? `${path}.${shown}` : `${path}[${JSON.stringify(shown)}]`;
 }
 
 function stringType(strings: StringShape): TypeRef {
@@ -490,7 +496,8 @@ const INHERITED_MEMBERS = new Set([
 /**
  * Gives each property a member name: its key in PascalCase; with Value appended when that is the
  * type's own name or an inherited member (ToString → ToStringValue); numbered when two keys meet
- * (a, A → A, A2), skipping names other keys would get by themselves (a, A, a2 → A, A3, A2).
+ * (a, A → A, A2), skipping names other keys would get by themselves (a, A, a2 → A, A3, A2; and
+ * user, userValue in type User → UserValue2, UserValue).
  */
 function withMemberNames(typeName: string, properties: readonly Property[]): Property[] {
   const natural = properties.map((property) => pascalCase(property.jsonName));
@@ -502,7 +509,8 @@ function withMemberNames(typeName: string, properties: readonly Property[]): Pro
     const own = natural[index] ?? 'Item';
     const base = own === typeName || INHERITED_MEMBERS.has(own) ? `${own}Value` : own;
     let name = base;
-    if (used.has(name)) {
+    // A Value name that another key would get by itself (userValue) is left to that key.
+    if (used.has(name) || (base !== own && naturalSet.has(base))) {
       let n = nextNumber.get(base) ?? 2;
       do name = `${base}${String(n++)}`;
       while (used.has(name) || naturalSet.has(name));

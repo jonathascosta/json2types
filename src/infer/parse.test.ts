@@ -97,13 +97,13 @@ describe('parseJson', () => {
     ['{"a": 1,}', 'Trailing comma before }', 1, 9],
     ['[1, 2,]', 'Trailing comma before ]', 1, 7],
     ['{\n  "a": 1\n  "b": 2\n}', "Expected '}' or a comma after a property, found '\"'", 3, 3],
-    ["{'a': 1}", "Expected a property name in quotes, found '''", 1, 2],
+    ["{'a': 1}", 'Expected a property name in quotes, found U+0027', 1, 2],
     ['{"a" 1}', "Expected ':' after a property name, found '1'", 1, 6],
     ['"abc', 'Unterminated string', 1, 1],
     ['"a\tb"', 'Control characters must be escaped in strings', 1, 3],
     [String.raw`"\x"`, String.raw`Invalid escape '\x'`, 1, 2],
     [String.raw`"\u12"`, String.raw`Invalid \u escape: expected four hex digits`, 1, 2],
-    ['tru', "Unexpected 't'", 1, 1],
+    ['tru', 'Invalid literal: expected true, false or null', 1, 1],
     ['01', 'Invalid number', 1, 1],
     ['1.', 'Invalid number', 1, 1],
     ['{} x', "Unexpected 'x' after the JSON value", 1, 4],
@@ -117,7 +117,8 @@ describe('parseJson', () => {
     ['1e', 'Invalid number', 1, 1],
     ['1e+', 'Invalid number', 1, 1],
     ['[1, 1.5.2]', 'Invalid number', 1, 5],
-    ['nul', "Unexpected 'n'", 1, 1],
+    ['nul', 'Invalid literal: expected true, false or null', 1, 1],
+    ['\uFEFF}', "Unexpected '}'", 1, 1],
     ['truex', "Unexpected 'x' after the JSON value", 1, 5],
     ['"ab\\', 'Unterminated string', 1, 1],
   ])('reports %j with its position', (text, message, line, column) => {
@@ -148,7 +149,7 @@ describe('parseJson', () => {
   });
 
   it('treats a lone byte order mark as empty input', () => {
-    expect(errorOf('\uFEFF').message).toBe('Unexpected end of the input (line 1, column 2)');
+    expect(errorOf('\uFEFF').message).toBe('Unexpected end of the input (line 1, column 1)');
   });
 
   it('parses half a megabyte in reasonable time', () => {

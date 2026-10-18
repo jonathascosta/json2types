@@ -232,6 +232,28 @@ const IRREGULAR = new Map(
     waltzes: 'waltz',
     dwarves: 'dwarf',
     appendices: 'appendix',
+    dominoes: 'domino',
+    mangoes: 'mango',
+    mosquitoes: 'mosquito',
+    torpedoes: 'torpedo',
+    vetoes: 'veto',
+    cargoes: 'cargo',
+    hoodies: 'hoodie',
+    veggies: 'veggie',
+    pixies: 'pixie',
+    aches: 'ache',
+    clothes: 'clothing',
+    blitzes: 'blitz',
+    elves: 'elf',
+    loaves: 'loaf',
+    radii: 'radius',
+    cacti: 'cactus',
+    alumni: 'alumnus',
+    fungi: 'fungus',
+    nuclei: 'nucleus',
+    stimuli: 'stimulus',
+    bacteria: 'bacterium',
+    curricula: 'curriculum',
     menus: 'menu',
     gurus: 'guru',
     emus: 'emu',
@@ -260,15 +282,24 @@ const IRREGULAR = new Map(
 const SINGULAR_IN_S = new Set([
   'alias',
   'atlas',
+  'aws',
+  'bias',
   'canvas',
+  'chaos',
+  'christmas',
+  'cos',
+  'ethos',
   'gas',
+  'has',
+  'ios',
+  'kudos',
   'lens',
   'means',
-  'chaos',
-  'cos',
+  'pathos',
+  'plus',
+  'this',
+  'was',
   'yes',
-  'aws',
-  'ios',
 ]);
 
 /** Words that are the same in the plural, or have no singular worth using. */
@@ -287,6 +318,12 @@ const UNCOUNTABLE = new Set([
   'analytics',
   'statistics',
   'physics',
+  'mathematics',
+  'economics',
+  'politics',
+  'ethics',
+  'electronics',
+  'logistics',
 ]);
 
 /**
@@ -295,26 +332,35 @@ const UNCOUNTABLE = new Set([
  * the result is the name followed by Item. Pass the result through avoidReserved: Errors → Error.
  */
 export function singular(name: string): string {
-  // Items2 → Item2: the singular of the words, then the number back; Level2 → Level2Item.
-  const numbered = /^(.*\D)(\d+)$/.exec(name);
-  if (numbered) {
-    const words = numbered[1] ?? '';
+  // Scans rather than regexes on the whole name: patterns like /\p{Lu}{2,}s$/ backtrack
+  // quadratically on a long run of capitals, and a key can be a megabyte long.
+  let digitsStart = name.length;
+  while (digitsStart > 0 && /\d/.test(name.charAt(digitsStart - 1))) digitsStart--;
+  if (digitsStart > 0 && digitsStart < name.length) {
+    // Items2 → Item2: the singular of the words, then the number back; Level2 → Level2Item.
+    const words = name.slice(0, digitsStart);
     const base = singular(words);
-    return base === `${words}Item` ? `${name}Item` : base + (numbered[2] ?? '');
+    return base === `${words}Item` ? `${name}Item` : base + name.slice(digitsStart);
   }
   if (name.endsWith('Item')) return name;
 
-  const split = /^(.*?)(\p{Lu}[^\p{Lu}]*)$/u.exec(name);
-  const head = split?.[1] ?? '';
-  const last = split?.[2] ?? name;
+  const chars = Array.from(name);
+  const isUpper = (char: string | undefined): boolean => char !== undefined && /\p{Lu}/u.test(char);
+  let lastWord = chars.length - 1;
+  while (lastWord > 0 && !isUpper(chars[lastWord])) lastWord--;
+  const head = chars.slice(0, lastWord).join('');
+  const last = chars.slice(lastWord).join('');
   const lower = last.toLowerCase();
-  const restore = (word: string): string => head + last.charAt(0) + word.slice(1);
+  // Some letters change length when lower-cased (İ); there's no safe singular to build then.
+  if (lower.length !== last.length) return `${name}Item`;
+  const first = chars[lastWord] ?? '';
+  const restore = (word: string): string => head + first + word.slice(first.length);
 
   const irregular = IRREGULAR.get(lower);
   if (irregular !== undefined) return restore(irregular);
   if (UNCOUNTABLE.has(lower)) return `${name}Item`;
   // An acronym in the plural: URLs → URL, UserIDs → UserID. One all in capitals (GPS) is left alone.
-  if (/\p{Lu}{2,}s$/u.test(name)) return name.slice(0, -1);
+  if (chars.at(-1) === 's' && isUpper(chars.at(-2)) && isUpper(chars.at(-3))) return name.slice(0, -1);
   if (last.length > 1 && last === last.toUpperCase()) return `${name}Item`;
   if (lower.length < 3) return `${name}Item`;
   // A short acronym folded to lower case by pascalCase: Gps, Sms, Dns, Cms.
