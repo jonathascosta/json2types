@@ -138,7 +138,14 @@ describe('inferModel', () => {
   it('uses floating point when a fractional number is beyond an exact decimal', () => {
     const items = (json: string) => (infer(json).root.type as { items: { type: unknown } }).items.type;
     expect(items('[1.5, 79228162514264337593543950335.0]')).toEqual({ kind: 'decimal' });
-    expect(items('[1.5, 7.9e28, -7.9e28, 1e-400]')).toEqual({ kind: 'decimal' });
+    expect(items('[1.5, 7.9e28, -7.9e28, 1e-28, 0.0000000000000000000000000001]')).toEqual({
+      kind: 'decimal',
+    });
+    expect(items('[1.5, 79228162514264337593543950335.4]')).toEqual({ kind: 'decimal' });
+    expect(items('[1.5, 79228162514264337593543950335.5]')).toEqual({ kind: 'float' });
+    // Smaller than a decimal's smallest step, 1e-28: System.Text.Json would read it as 0.
+    expect(items('[2.5, 1.5e-35]')).toEqual({ kind: 'float' });
+    expect(items('[2.5, 9e-29]')).toEqual({ kind: 'float' });
     expect(items('[1.5, 79228162514264337593543950336.0]')).toEqual({ kind: 'float' });
     expect(items('[1.5, 8e28]')).toEqual({ kind: 'float' });
     expect(items('[1.5, -1e400]')).toEqual({ kind: 'float' });
@@ -269,6 +276,32 @@ describe('inferModel', () => {
       kind: 'array',
       items: plain({ kind: 'decimal' }),
     });
+  });
+
+  it('warns about numbers too small even for floating point', () => {
+    const model = infer('{"x":[1e-400, 1.5]}');
+    expect(property(model, 'Root', 'x')?.type).toEqual({ kind: 'array', items: plain({ kind: 'float' }) });
+    expect(model.diagnostics.map((d) => d.message)).toEqual([
+      'A number here is too small even for floating point; it reads as 0.',
+    ]);
+  });
+
+  it('classifies very long integers without slowing down', () => {
+    const huge = '9'.repeat(1_000_000);
+    const start = performance.now();
+    expect(infer(`[${huge}, ${huge}, ${huge}]`).root.type).toEqual({
+      kind: 'array',
+      items: plain({ kind: 'integer', bits: 'big' }),
+    });
+    expect(performance.now() - start).toBeLessThan(3000);
+  });
+
+  it('names thousands of types that want the same name in linear time', () => {
+    const json = `{${Array.from({ length: 20_000 }, (_, i) => `"k${String(i)}":{"x":{"v${String(i)}":1}}`).join(',')}}`;
+    const start = performance.now();
+    const model = infer(json);
+    expect(model.declarations.filter((d) => d.name.startsWith('X'))).toHaveLength(20_000);
+    expect(performance.now() - start).toBeLessThan(5000);
   });
 
   it('warns about numbers too large even for floating point', () => {

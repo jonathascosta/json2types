@@ -25,6 +25,9 @@ describe('typeName', () => {
     ['\u0301abc', 'Abc'],
     ['ßtraße', 'ßtraße'],
     ['version', 'VersionItem'],
+    ['date_time_offset', 'DateTimeOffsetItem'],
+    ['json_element', 'JsonElementItem'],
+    ['pick', 'PickItem'],
     ['string', 'StringItem'],
     ['date', 'DateItem'],
   ])('%j → %s', (key, name) => {
@@ -89,6 +92,12 @@ describe('singular', () => {
     ['Echoes', 'Echo'],
     ['Constructor', 'ConstructorItem'],
     ['Constructors', 'Constructor'],
+    ['Rookies', 'Rookie'],
+    ['Selfies', 'Selfie'],
+    ['Axes', 'Axis'],
+    ['Phenomena', 'Phenomenon'],
+    ['GPS', 'GPSItem'],
+    ['UserGPS', 'UserGPSItem'],
     ['ListItem', 'ListItem'],
   ])('%s → %s', (plural, name) => {
     expect(singular(plural)).toBe(name);
