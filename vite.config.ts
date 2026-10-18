@@ -1,21 +1,11 @@
 /// <reference types="vitest/config" />
 import { readFileSync } from 'node:fs';
 import { defineConfig, type Plugin } from 'vite';
+import { contentSecurityPolicy } from './scripts/csp.mjs';
 
 const { version } = JSON.parse(readFileSync(new URL('package.json', import.meta.url), 'utf8')) as {
   version: string;
 };
-
-// The page promises that nothing pasted into it leaves the browser. This policy holds it to that:
-// no requests to other origins and no network calls from scripts at all. Added to the built page
-// only, because the dev server's live reload needs a WebSocket.
-const contentSecurityPolicy = [
-  "default-src 'self'",
-  "connect-src 'none'",
-  "object-src 'none'",
-  "base-uri 'none'",
-  "form-action 'none'",
-].join('; ');
 
 function securityPolicy(): Plugin {
   return {
@@ -24,11 +14,12 @@ function securityPolicy(): Plugin {
     // Placed right after the charset, which by convention comes first. Fails the build rather than
     // ship a page without the policy.
     transformIndexHtml: (html) => {
-      const charset = '<meta charset="utf-8" />';
-      if (!html.includes(charset)) throw new Error('index.html needs <meta charset="utf-8" /> for the CSP');
+      const charset = /<meta\s+charset=["']?utf-8["']?\s*\/?>/i;
+      if (!charset.test(html)) throw new Error('Every page needs <meta charset="utf-8"> for the CSP');
       return html.replace(
         charset,
-        `${charset}\n    <meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicy}" />`,
+        (tag) =>
+          `${tag}\n    <meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicy}" />`,
       );
     },
   };

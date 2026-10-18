@@ -17,4 +17,5 @@ if (window.top === window.self) {
 const statusLine = document.getElementById('status');
 if (statusLine) statusLine.textContent = `Coming soon · v${__APP_VERSION__}`;
 
+// Makes this file a module, so its names don't clash with the page's globals (window.status).
 export {};

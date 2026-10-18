@@ -17,3 +17,6 @@ updates:
     # Wait a week after a release before proposing it, as a buffer against a compromised version.
     cooldown:
       default-days: 7
+    groups:
+      actions:
+        patterns: ['*']
