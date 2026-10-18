@@ -97,6 +97,10 @@ describe('singular', () => {
     ['Axes', 'Axis'],
     ['Phenomena', 'Phenomenon'],
     ['GPS', 'GPSItem'],
+    ['Gps', 'GpsItem'],
+    ['Sms', 'SmsItem'],
+    ['Dns', 'DnsItem'],
+    ['Apis', 'Api'],
     ['UserGPS', 'UserGPSItem'],
     ['ListItem', 'ListItem'],
   ])('%s → %s', (plural, name) => {

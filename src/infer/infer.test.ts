@@ -304,6 +304,22 @@ describe('inferModel', () => {
     expect(performance.now() - start).toBeLessThan(5000);
   });
 
+  it('does not warn about long integers, which are kept whole', () => {
+    const model = infer(`{"x":[${'9'.repeat(400)}, 1]}`);
+    expect(property(model, 'Root', 'x')?.type).toEqual({
+      kind: 'array',
+      items: plain({ kind: 'integer', bits: 'big' }),
+    });
+    expect(model.diagnostics).toEqual([]);
+  });
+
+  it('warns about a long integer that ends up as floating point', () => {
+    const model = infer(`{"x":[${'9'.repeat(400)}, 1.5]}`);
+    expect(model.diagnostics.map((d) => d.message)).toEqual([
+      'A number here is too large even for floating point.',
+    ]);
+  });
+
   it('warns about numbers too large even for floating point', () => {
     const model = infer('{"x":[1e400, 1.5]}');
     expect(property(model, 'Root', 'x')?.type).toEqual({ kind: 'array', items: plain({ kind: 'float' }) });

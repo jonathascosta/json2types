@@ -198,6 +198,7 @@ const IRREGULAR = new Map(
     goalies: 'goalie',
     phenomena: 'phenomenon',
     axes: 'axis',
+    apis: 'api',
     // -che words, whose plural only adds an s.
     caches: 'cache',
     niches: 'niche',
@@ -255,6 +256,8 @@ export function singular(name: string): string {
   if (/\p{Lu}{2,}s$/u.test(name)) return name.slice(0, -1);
   if (last.length > 1 && last === last.toUpperCase()) return `${name}Item`;
   if (lower.length < 3) return `${name}Item`;
+  // A short acronym folded to lower case by pascalCase: Gps, Sms, Dns, Cms.
+  if (/^[^aeiouy]+s$/.test(lower)) return `${name}Item`;
   if (/[^aeiou]ies$/.test(lower)) return restore(`${lower.slice(0, -3)}y`);
   // Boxes, Addresses, Wishes, Buzzes, Matches, Speeches; the -che words are in IRREGULAR.
   if (/(?:ss|x|sh|zz|ch)es$/.test(lower)) return restore(lower.slice(0, -2));

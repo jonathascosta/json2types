@@ -67,6 +67,9 @@ interface StringShape {
 
 interface NumberShape {
   decimal: boolean;
+  /** Some value is infinite as a double (too large) or reads as 0 though it isn't (too small). */
+  infinite: boolean;
+  underflows: boolean;
   /** Some value is beyond what an exact decimal holds (±79228162514264337593543950335). */
   beyondDecimal: boolean;
   bits: 32 | 64 | 'big';
@@ -131,8 +134,8 @@ const DECIMAL_MAX = 79228162514264337593543950335n;
 
 /**
  * Whether a JSON number can't be held by a C# decimal, worked out exactly from its text: beyond
- * DECIMAL_MAX (rounding included), or non-zero but smaller than its smallest step, 1e-28, which
- * System.Text.Json would read as 0.
+ * DECIMAL_MAX (rounding included), or non-zero but below its smallest step, 1e-28, where it would
+ * be rounded to 0 or to 1e-28.
  */
 function beyondDecimal(raw: string): boolean {
   const match = /^-?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(raw);
@@ -157,15 +160,27 @@ function beyondDecimal(raw: string): boolean {
 }
 
 function numberShape(raw: string): NumberShape {
-  if (/[.eE]/.test(raw)) return { decimal: true, beyondDecimal: beyondDecimal(raw), bits: 32 };
+  const asDouble = Number(raw);
+  const infinite = !Number.isFinite(asDouble);
+  const underflows = asDouble === 0 && /[1-9]/.test(raw.replace(/[eE].*$/, ''));
+  const integer = (bits: NumberShape['bits'], beyond = false): NumberShape => ({
+    decimal: false,
+    infinite,
+    underflows,
+    beyondDecimal: beyond,
+    bits,
+  });
+  if (/[.eE]/.test(raw)) {
+    return { decimal: true, infinite, underflows, beyondDecimal: beyondDecimal(raw), bits: 32 };
+  }
   // By digit count first, so a million-digit integer doesn't go through BigInt.
   const length = raw.replace(/^-/, '').length;
-  if (length <= 9) return { decimal: false, beyondDecimal: false, bits: 32 };
-  if (length > 29) return { decimal: false, beyondDecimal: true, bits: 'big' };
+  if (length <= 9) return integer(32);
+  if (length > 29) return integer('big', true);
   const value = BigInt(raw);
-  if (value >= -INT32 && value < INT32) return { decimal: false, beyondDecimal: false, bits: 32 };
-  if (value >= -INT64 && value < INT64) return { decimal: false, beyondDecimal: false, bits: 64 };
-  return { decimal: false, beyondDecimal: value > DECIMAL_MAX || value < -DECIMAL_MAX, bits: 'big' };
+  if (value >= -INT32 && value < INT32) return integer(32);
+  if (value >= -INT64 && value < INT64) return integer(64);
+  return integer('big', value > DECIMAL_MAX || value < -DECIMAL_MAX);
 }
 
 const widerBits = (a: NumberShape['bits'], b: NumberShape['bits']): NumberShape['bits'] =>
@@ -198,19 +213,11 @@ function addSample(shape: Shape, value: JsonValue, path: string, diagnostics: Di
     }
     case 'number': {
       const seen = numberShape(value.raw);
-      const asDouble = Number(value.raw);
-      if (!Number.isFinite(asDouble)) {
-        diagnostics.add(path, 'warning', 'A number here is too large even for floating point.');
-      } else if (asDouble === 0 && /[1-9]/.test(value.raw.replace(/[eE].*$/, ''))) {
-        diagnostics.add(
-          path,
-          'warning',
-          'A number here is too small even for floating point; it reads as 0.',
-        );
-      }
       shape.numbers = shape.numbers
         ? {
             decimal: shape.numbers.decimal || seen.decimal,
+            infinite: shape.numbers.infinite || seen.infinite,
+            underflows: shape.numbers.underflows || seen.underflows,
             beyondDecimal: shape.numbers.beyondDecimal || seen.beyondDecimal,
             bits: widerBits(shape.numbers.bits, seen.bits),
           }
@@ -314,8 +321,19 @@ class Resolver {
 
     if (shape.strings) return { type: stringType(shape.strings), nullable };
     if (shape.numbers) {
-      const { decimal, beyondDecimal, bits } = shape.numbers;
+      const { decimal, beyondDecimal, bits, infinite, underflows } = shape.numbers;
       if (!decimal) return { type: { kind: 'integer', bits }, nullable };
+      // Only floating point loses these; integers of any size are kept whole.
+      if (beyondDecimal && infinite) {
+        this.diagnostics.add(path, 'warning', 'A number here is too large even for floating point.');
+      }
+      if (beyondDecimal && underflows) {
+        this.diagnostics.add(
+          path,
+          'warning',
+          'A number here is too small even for floating point; it reads as 0.',
+        );
+      }
       return { type: { kind: beyondDecimal ? 'float' : 'decimal' }, nullable };
     }
     if (shape.object) return { type: this.collect(shape.object, path, nameHint), nullable };
@@ -378,7 +396,8 @@ class Resolver {
     const claim = (hint: string): string => {
       let name = hint;
       let n = nextNumber.get(hint) ?? 2;
-      while (used.has(name)) name = `${hint}${String(n++)}`;
+      // Numbered names skip the built-in ones too: Int → Int2, …, never Int16.
+      while (used.has(name) || name !== avoidReserved(name)) name = `${hint}${String(n++)}`;
       nextNumber.set(hint, n);
       used.add(name);
       return name;
