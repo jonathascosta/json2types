@@ -195,8 +195,8 @@ function stableCase(word: string, changed: string): string {
  * Turns any JSON key into PascalCase words: "home address" → HomeAddress, "HOME_ADDRESS" →
  * HomeAddress, "2fa" → Item2fa. Words are runs of characters valid in identifiers in both
  * languages (letters, Mn and Mc marks, decimal digits, all within ECMAScript's ID_Continue) and in
- * the stable blocks (UNSTABLE_SOURCE); everything else separates them, so the result is a valid identifier in C# and
- * TypeScript for any compiler.
+ * the stable blocks (UNSTABLE_SOURCE); everything else separates them, so the result is a valid
+ * identifier in C# and TypeScript for any compiler.
  */
 export function pascalCase(key: string): string {
   // Two passes instead of a callback per character: outside the C# classes, then outside ID_Continue.
