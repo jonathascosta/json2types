@@ -122,7 +122,7 @@ export function parseJson(text: string): JsonValue {
         pos += 6;
       } else {
         const char = ESCAPES.get(escape);
-        if (char === undefined) return fail(`Invalid escape '\\${escape}'`);
+        if (char === undefined) return fail(`Invalid escape: a backslash followed by ${describe(pos + 1)}`);
         result += char;
         pos += 2;
       }
@@ -154,9 +154,10 @@ export function parseJson(text: string): JsonValue {
           entries.push({ key, value: parseValue(depth + 1) });
           skipWhitespace();
           if (text[pos] === ',') {
+            const comma = pos;
             pos++;
             skipWhitespace();
-            if (text[pos] === '}') fail('Trailing comma before }');
+            if (text[pos] === '}') fail('Trailing comma before }', comma);
             continue;
           }
           expectChar('}', 'or a comma after a property');
@@ -175,9 +176,10 @@ export function parseJson(text: string): JsonValue {
           items.push(parseValue(depth + 1));
           skipWhitespace();
           if (text[pos] === ',') {
+            const comma = pos;
             pos++;
             skipWhitespace();
-            if (text[pos] === ']') fail('Trailing comma before ]');
+            if (text[pos] === ']') fail('Trailing comma before ]', comma);
             continue;
           }
           expectChar(']', 'or a comma after an array item');

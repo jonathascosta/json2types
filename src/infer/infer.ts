@@ -281,7 +281,10 @@ function addSample(shape: Shape, value: JsonValue, diagnostics: Diagnostics): vo
 
 /** A key as shown in paths and messages: long ones are cut short, so deep paths stay readable. */
 function shownKey(key: string): string {
-  return key.length > 40 ? `${key.slice(0, 40)}…` : key;
+  if (key.length <= 40) return key;
+  // The start and the end, cut on code points, so keys that share a long prefix still differ.
+  const chars = Array.from(key);
+  return chars.length <= 40 ? key : `${chars.slice(0, 30).join('')}…${chars.slice(-10).join('')}`;
 }
 
 /** RFC 9535 JSONPath: dot notation for simple names, brackets for the rest. */

@@ -59,7 +59,10 @@ export interface Diagnostic {
   readonly path: string;
   readonly severity: 'warning' | 'info';
   readonly message: string;
-  /** How many times it happened there, e.g. once per item of an array. */
+  /**
+   * How many times it happened there, e.g. once per item of an array. For a repeated key, each
+   * repeat counts: a key three times in one object counts 2.
+   */
   readonly count: number;
 }
 

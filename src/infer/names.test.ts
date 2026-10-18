@@ -24,6 +24,9 @@ describe('typeName', () => {
     ['x\u2e2fy', 'XY'],
     ['\u0301abc', 'Abc'],
     ['ßtraße', 'ßtraße'],
+    ['𠀀', 'Item'],
+    ['𝑥y', 'Y'],
+    ['a𠀀b', 'AB'],
     ['version', 'VersionItem'],
     ['date_time_offset', 'DateTimeOffsetItem'],
     ['json_element', 'JsonElementItem'],
@@ -35,8 +38,29 @@ describe('typeName', () => {
   });
 
   it('only produces identifiers valid in C# and TypeScript', () => {
-    for (const key of ['a b', 'x²', '½', 'á', '١٢٣', 'über-größe', '日本語', 'emoji😀name']) {
-      expect(typeName(key)).toMatch(/^[\p{L}\p{Nl}][\p{L}\p{M}\p{Nd}\p{Nl}]*$/u);
+    const keys = [
+      'a b',
+      'x²',
+      '½',
+      'a\u0301',
+      '١٢٣',
+      'über-größe',
+      '日本語',
+      'emoji😀name',
+      'b\u20ddc',
+      'x\u2e2fy',
+      '𠀀x',
+      '𝑥y',
+      '\u0301abc',
+    ];
+    for (const key of keys) {
+      const name = typeName(key);
+      // C#: a letter or letter number, then letters, Mn, Mc, decimal digits and letter numbers.
+      expect(name).toMatch(/^[\p{L}\p{Nl}][\p{L}\p{Mn}\p{Mc}\p{Nd}\p{Nl}]*$/u);
+      // ECMAScript: ID_Start, then ID_Continue.
+      expect(name).toMatch(/^\p{ID_Start}\p{ID_Continue}*$/u);
+      // C# reads identifiers one UTF-16 unit at a time: no surrogate pairs (CS1056).
+      expect(name).not.toMatch(/[\u{10000}-\u{10FFFF}]/u);
     }
   });
 });
@@ -111,6 +135,10 @@ describe('singular', () => {
     ['Dwarves', 'Dwarf'],
     ['Appendices', 'Appendix'],
     ['Settings', 'Setting'],
+    ['Zeroes', 'Zero'],
+    ['Gasses', 'Gas'],
+    ['Oxen', 'Ox'],
+    ['Pants', 'PantsItem'],
     ['Bias', 'BiasItem'],
     ['Kudos', 'KudosItem'],
     ['Dominoes', 'Domino'],

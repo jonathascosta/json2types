@@ -397,10 +397,16 @@ describe('inferModel', () => {
   it('keeps long keys short in diagnostic paths and messages', () => {
     const key = 'k'.repeat(100);
     const model = infer(`{"${key}":[{"a":1,"a":2}]}`);
-    expect(model.diagnostics[0]?.path).toBe(`$["${'k'.repeat(40)}…"][*].a`);
+    expect(model.diagnostics[0]?.path).toBe(`$["${'k'.repeat(30)}…${'k'.repeat(10)}"][*].a`);
+    // Keys that share a long start still show differently.
+    const twins = infer(`{"${'x'.repeat(50)}1":[null],"${'x'.repeat(50)}2":[null]}`);
+    expect(new Set(twins.diagnostics.map((d) => d.path)).size).toBe(2);
+    // Cut on code points: no half of an emoji left behind.
+    const emoji = infer(`{"${'😀'.repeat(50)}":[null]}`);
+    expect(emoji.diagnostics[0]?.path).toBe(`$["${'😀'.repeat(30)}…${'😀'.repeat(10)}"][*]`);
     const nested = infer(`{"${key}":{"${key}":1,"${key}":2}}`);
     expect(nested.diagnostics[0]?.message).toBe(
-      `The key "${'k'.repeat(40)}…" appears more than once in the same object; the last value is used.`,
+      `The key "${'k'.repeat(30)}…${'k'.repeat(10)}" appears more than once in the same object; the last value is used.`,
     );
   });
 

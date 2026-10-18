@@ -94,14 +94,15 @@ describe('parseJson', () => {
 
   it.each([
     ['', 'Unexpected end of the input', 1, 1],
-    ['{"a": 1,}', 'Trailing comma before }', 1, 9],
-    ['[1, 2,]', 'Trailing comma before ]', 1, 7],
+    ['{"a": 1,}', 'Trailing comma before }', 1, 8],
+    ['[1, 2,]', 'Trailing comma before ]', 1, 6],
     ['{\n  "a": 1\n  "b": 2\n}', "Expected '}' or a comma after a property, found '\"'", 3, 3],
     ["{'a': 1}", 'Expected a property name in quotes, found U+0027', 1, 2],
     ['{"a" 1}', "Expected ':' after a property name, found '1'", 1, 6],
     ['"abc', 'Unterminated string', 1, 1],
     ['"a\tb"', 'Control characters must be escaped in strings', 1, 3],
-    [String.raw`"\x"`, String.raw`Invalid escape '\x'`, 1, 2],
+    [String.raw`"\x"`, "Invalid escape: a backslash followed by 'x'", 1, 2],
+    ['"\\\n"', 'Invalid escape: a backslash followed by U+000A', 1, 2],
     [String.raw`"\u12"`, String.raw`Invalid \u escape: expected four hex digits`, 1, 2],
     ['tru', 'Invalid literal: expected true, false or null', 1, 1],
     ['01', 'Invalid number', 1, 1],
