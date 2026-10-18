@@ -89,6 +89,36 @@ export function saveInput(
   return !settings.rememberInput;
 }
 
+/** A form field's value: text, or on/off for a checkbox; null when the page has no such field. */
+export type FieldReader = (name: string) => string | boolean | null;
+
+/**
+ * The settings a form shows. A page may have only some of the fields (a language's own page has
+ * only that language's options): the others keep their known values rather than fall back to the
+ * defaults, so one page never resets what another set.
+ */
+export function settingsFromForm(known: Settings, field: FieldReader, input: string): Settings {
+  const pick = (name: string, fallback: string | boolean) => field(name) ?? fallback;
+  const settings = parseSettings({
+    language: pick('language', known.language),
+    rootName: pick('rootName', known.rootName),
+    csharp: {
+      kind: pick('csharpKind', known.csharp.kind),
+      attributes: pick('csharpAttributes', known.csharp.attributes),
+      nullable: pick('csharpNullable', known.csharp.nullable),
+      collection: pick('csharpCollection', known.csharp.collection),
+      namespace: pick('csharpNamespace', known.csharp.namespace),
+    },
+    typescript: {
+      declaration: pick('tsDeclaration', known.typescript.declaration),
+      export: pick('tsExport', known.typescript.export),
+      readonly: pick('tsReadonly', known.typescript.readonly),
+    },
+    rememberInput: pick('rememberInput', known.rememberInput),
+  });
+  return { ...settings, input };
+}
+
 export function parseSettings(value: unknown): Settings {
   const d = DEFAULT_SETTINGS;
   const s = record(value);

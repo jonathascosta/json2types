@@ -59,6 +59,48 @@ export function findProblems(files) {
   return problems;
 }
 
+/** The pages the site must have, and which of them carry the converter. */
+const PAGES = [
+  { name: 'index.html', tool: true, url: 'https://json2types.jonathas.net/' },
+  { name: 'csharp/index.html', tool: true, url: 'https://json2types.jonathas.net/csharp/' },
+  { name: 'typescript/index.html', tool: true, url: 'https://json2types.jonathas.net/typescript/' },
+  { name: '404.html', tool: false, url: null },
+];
+
+/**
+ * The site's own pages: each one there, with its header and footer and no marker left unfilled;
+ * the converter on the pages that have it; each indexable page canonical and in the sitemap, the
+ * 404 page kept out of search.
+ * @param {{ name: string, text: string }[]} files
+ * @returns {string[]}
+ */
+export function findMissingPages(files) {
+  const problems = [];
+  const sitemap = files.find((file) => file.name === 'sitemap.xml')?.text ?? '';
+  if (sitemap === '') problems.push('dist/ has no sitemap.xml');
+  for (const { name, tool, url } of PAGES) {
+    const text = files.find((file) => file.name === name)?.text;
+    if (text === undefined) {
+      problems.push(`${name}: missing`);
+      continue;
+    }
+    if (!text.includes('class="site-header"') || !text.includes('class="site-footer"')) {
+      problems.push(`${name}: lacks the site header or footer`);
+    }
+    if (/<!--\s*(site-|tool:)/.test(text)) problems.push(`${name}: has an unfilled page-parts marker`);
+    if (tool && !text.includes('id="tool"')) problems.push(`${name}: lacks the converter`);
+    if (url === null) {
+      if (!text.includes('<meta name="robots" content="noindex"'))
+        problems.push(`${name}: isn't kept out of search`);
+    } else {
+      if (!text.includes(`<link rel="canonical" href="${url}"`))
+        problems.push(`${name}: its canonical isn't ${url}`);
+      if (!sitemap.includes(`<loc>${url}</loc>`)) problems.push(`${name}: ${url} isn't in sitemap.xml`);
+    }
+  }
+  return problems;
+}
+
 /** @param {string} dist */
 function readSite(dist) {
   return readdirSync(dist, { recursive: true, encoding: 'utf8' })
@@ -68,7 +110,7 @@ function readSite(dist) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const files = readSite('dist');
-  const problems = findProblems(files);
+  const problems = [...findProblems(files), ...findMissingPages(files)];
   if (problems.length > 0) {
     console.error(problems.join('\n'));
     process.exit(1);

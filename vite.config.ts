@@ -16,6 +16,8 @@ function securityPolicy(): Plugin {
 }
 
 export default defineConfig({
+  // Like GitHub Pages: each page is its own file, and an unknown path is no page (not the home one).
+  appType: 'mpa',
   plugins: [pageParts(), securityPolicy(), workerSource()],
   build: {
     // Keep every asset a file of its own: the policy above has no data: sources.

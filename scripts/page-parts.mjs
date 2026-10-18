@@ -18,7 +18,8 @@ export function siteHeader(path) {
       ? `<li><a href="${href}" aria-current="page">${text}</a></li>`
       : `<li><a href="${href}">${text}</a></li>`,
   ).join('\n          ');
-  return `<header class="site-header">
+  return `<a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
       <a class="brand" href="/">json2types</a>
       <nav aria-label="Pages">
         <ul>
@@ -100,8 +101,9 @@ export function toolMarkup(language) {
         ? CSHARP_OPTIONS
         : typescriptOptions(false);
   const outputLabel = language === 'typescript' ? 'TypeScript code' : 'C# code';
-  // The message sits outside the form, which noscript.css hides.
-  return `<noscript><p class="error">The converter needs JavaScript, which is turned off.</p></noscript>
+  // The privacy note and the no-script message sit outside the form, which noscript.css hides.
+  return `<p class="privacy">Everything runs in your browser: nothing you paste is uploaded.</p>
+      <noscript><p class="error">The converter needs JavaScript, which is turned off.</p></noscript>
       <form class="tool" id="tool" aria-label="Converter">
         <div class="settings">
           ${choice}
@@ -157,19 +159,39 @@ export function toolMarkup(language) {
       </form>`;
 }
 
-const TOOL = /<!--\s*tool:(any|csharp|typescript)\s*-->/;
+const MARKER = /<!--\s*(site-header|site-footer|tool:[\w-]+)\s*-->/g;
+/** @type {readonly string[]} */
+const LANGUAGES = ['any', 'csharp', 'typescript'];
 
 /**
- * Fills a page's markers. Throws on a page whose tool marker names no known language, rather than
- * ship it without the converter.
+ * Fills a page's markers. Throws on a converter marker that names no known language, and on a page
+ * without its header or footer, rather than ship it without them.
  * @param {string} html
  * @param {string} path The page's path, e.g. /csharp/.
  */
 export function fillParts(html, path) {
-  return html
-    .replace('<!-- site-header -->', siteHeader(path))
-    .replace('<!-- site-footer -->', siteFooter())
-    .replace(TOOL, (_, /** @type {ToolLanguage} */ language) => toolMarkup(language));
+  const found = new Set();
+  const filled = html.replace(MARKER, (_, /** @type {string} */ name) => {
+    found.add(name);
+    if (name === 'site-header') return siteHeader(path);
+    if (name === 'site-footer') return siteFooter();
+    const language = name.slice('tool:'.length);
+    if (!LANGUAGES.includes(language)) throw new Error(`${path}: no converter for "${language}"`);
+    return toolMarkup(/** @type {ToolLanguage} */ (language));
+  });
+  for (const part of ['site-header', 'site-footer']) {
+    if (!found.has(part)) throw new Error(`${path}: lacks <!-- ${part} -->`);
+  }
+  return filled;
+}
+
+/**
+ * The page's path for its markers: Vite names pages by file (/csharp/index.html), the site serves
+ * them by folder (/csharp/).
+ * @param {string} file
+ */
+export function pagePath(file) {
+  return file.replace(/index\.html$/, '');
 }
 
 /** @returns {import('vite').Plugin} */
@@ -179,8 +201,7 @@ export function pageParts() {
     transformIndexHtml: {
       order: 'pre',
       handler(html, context) {
-        // /index.html and /csharp/index.html are served at / and /csharp/.
-        return fillParts(html, context.path.replace(/index\.html$/, ''));
+        return fillParts(html, pagePath(context.path));
       },
     },
   };

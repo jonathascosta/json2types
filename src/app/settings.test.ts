@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_SETTINGS,
+  settingsFromForm,
   loadSettings,
   MAX_REMEMBERED,
   parseSettings,
@@ -114,5 +115,60 @@ describe('settings', () => {
     }).not.toThrow();
     expect(saveInput(throwing, CUSTOM)).toBe(false);
     expect(loadSettings(throwing)).toEqual(DEFAULT_SETTINGS);
+  });
+});
+
+describe('settingsFromForm', () => {
+  const form =
+    (values: Record<string, string | boolean>) =>
+    (name: string): string | boolean | null =>
+      values[name] ?? null;
+
+  it("keeps the other language's options on a language's own page", () => {
+    // /csharp/ has only the C# fields: the TypeScript ones keep what was known.
+    const fromCsharpPage = settingsFromForm(
+      CUSTOM,
+      form({
+        language: 'csharp',
+        rootName: 'Order',
+        csharpKind: 'class',
+        csharpAttributes: 'none',
+        csharpNullable: true,
+        csharpCollection: 'list',
+        csharpNamespace: '',
+        rememberInput: false,
+      }),
+      '{}',
+    );
+    expect(fromCsharpPage.typescript).toEqual(CUSTOM.typescript);
+    expect(fromCsharpPage.csharp).toEqual({
+      kind: 'class',
+      attributes: 'none',
+      nullable: true,
+      collection: 'list',
+      namespace: '',
+    });
+    expect(fromCsharpPage.language).toBe('csharp');
+    expect(fromCsharpPage.input).toBe('{}');
+
+    const fromTypescriptPage = settingsFromForm(
+      CUSTOM,
+      form({ language: 'typescript', tsDeclaration: 'interface', tsExport: true, tsReadonly: false }),
+      '',
+    );
+    expect(fromTypescriptPage.csharp).toEqual(CUSTOM.csharp);
+    expect(fromTypescriptPage.typescript).toEqual({
+      declaration: 'interface',
+      export: true,
+      readonly: false,
+    });
+    expect(fromTypescriptPage.rootName).toBe(CUSTOM.rootName);
+  });
+
+  it('still checks what the form holds', () => {
+    expect(settingsFromForm(CUSTOM, form({ csharpKind: 'struct', tsExport: 'yes' }), '')).toMatchObject({
+      csharp: { kind: 'class' },
+      typescript: { export: true },
+    });
   });
 });

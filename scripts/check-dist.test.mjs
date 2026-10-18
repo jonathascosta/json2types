@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findProblems } from './check-dist.mjs';
+import { findMissingPages, findProblems } from './check-dist.mjs';
 import { injectPolicy } from './csp.mjs';
 
 /** @typedef {{ name: string, text: string }} SiteFile */
@@ -99,5 +99,57 @@ describe('injectPolicy', () => {
 
   it('refuses a page without a charset', () => {
     expect(() => injectPolicy('<head><title>x</title></head>')).toThrow(/charset/);
+  });
+});
+
+describe('findMissingPages', () => {
+  /** @param {string} name @param {string} head @param {string} body */
+  const file = (name, head, body = '<form id="tool"></form>') => ({
+    name,
+    text: `<head>${head}</head><body><header class="site-header"></header>${body}<footer class="site-footer"></footer></body>`,
+  });
+  const canonical = (/** @type {string} */ path) =>
+    `<link rel="canonical" href="https://json2types.jonathas.net${path}" />`;
+  const sitemap = {
+    name: 'sitemap.xml',
+    text: ['/', '/csharp/', '/typescript/']
+      .map((p) => `<loc>https://json2types.jonathas.net${p}</loc>`)
+      .join(''),
+  };
+  const complete = () => [
+    file('index.html', canonical('/')),
+    file('csharp/index.html', canonical('/csharp/')),
+    file('typescript/index.html', canonical('/typescript/')),
+    file('404.html', '<meta name="robots" content="noindex" />', '<p>Not found</p>'),
+    sitemap,
+  ];
+
+  it('accepts the complete site', () => {
+    expect(findMissingPages(complete())).toEqual([]);
+  });
+
+  it('flags a page the build dropped, or one without its converter, header or footer', () => {
+    const site = complete().filter((f) => f.name !== 'typescript/index.html');
+    site[1] = file('csharp/index.html', canonical('/csharp/'), '<p>no tool</p>');
+    site[0] = { name: 'index.html', text: canonical('/') + '<form id="tool"></form>' };
+    expect(findMissingPages(site)).toEqual([
+      'index.html: lacks the site header or footer',
+      'csharp/index.html: lacks the converter',
+      'typescript/index.html: missing',
+    ]);
+  });
+
+  it('flags unfilled markers, a wrong canonical, a page missing from the sitemap and an indexable 404', () => {
+    const site = complete();
+    site[0] = file('index.html', canonical('/'), '<form id="tool"></form><!-- tool:java -->');
+    site[1] = file('csharp/index.html', canonical('/csharp'));
+    site[3] = file('404.html', '', '');
+    site[4] = { name: 'sitemap.xml', text: sitemap.text.replace('/typescript/', '/ts/') };
+    expect(findMissingPages(site)).toEqual([
+      'index.html: has an unfilled page-parts marker',
+      "csharp/index.html: its canonical isn't https://json2types.jonathas.net/csharp/",
+      "typescript/index.html: https://json2types.jonathas.net/typescript/ isn't in sitemap.xml",
+      "404.html: isn't kept out of search",
+    ]);
   });
 });

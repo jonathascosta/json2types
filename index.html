@@ -26,13 +26,17 @@
     <meta property="og:image" content="https://json2types.jonathas.net/og/home.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="json2types: JSON on the left, the C# and TypeScript types it gives on the right"
+    />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="stylesheet" href="/src/styles.css" />
     <noscript><link rel="stylesheet" href="/noscript.css" /></noscript>
   </head>
   <body>
     <!-- site-header -->
-    <main>
+    <main id="main">
       <div class="intro">
         <h1>json2types</h1>
         <p class="lede">Paste JSON, get C# and TypeScript types.</p>
@@ -50,8 +54,8 @@
         <p>
           It looks at every value, not just the first: the objects of an array are merged into one type, a
           property missing from some of them becomes optional, one that is <code>null</code> in some becomes
-          nullable, and integers mixed with fractions become decimals. Dates, date-times and GUIDs are
-          recognised when every value in a place is one.
+          nullable, and integers mixed with fractions become decimals. In C#, dates, date-times and GUIDs get
+          their own types when every value in a place is one.
         </p>
 
         <div class="cards">

@@ -26,13 +26,17 @@
     <meta property="og:image" content="https://json2types.jonathas.net/og/typescript.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="JSON on the left, the TypeScript interface json2types writes for it on the right"
+    />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="stylesheet" href="/src/styles.css" />
     <noscript><link rel="stylesheet" href="/noscript.css" /></noscript>
   </head>
   <body>
     <!-- site-header -->
-    <main>
+    <main id="main">
       <div class="intro">
         <h1>JSON to TypeScript</h1>
         <p class="lede">Paste JSON, get TypeScript interfaces or types.</p>
@@ -46,7 +50,8 @@
           <dt>Interfaces or types</dt>
           <dd>
             Each object becomes <code>interface Order { … }</code> or <code>type Order = { … };</code>. They
-            type the JSON the same way; pick the one your code base uses.
+            type the JSON the same way; pick the one your code base uses. An object that was always empty is
+            written as <code>type X = Record&lt;string, never&gt;</code> either way.
           </dd>
           <dt>Export</dt>
           <dd>
@@ -80,12 +85,31 @@
           >). Type names are PascalCase, and the items of an array are named in the singular (<code
             >orders</code
           >
-          gives <code>Order</code>). Objects under the same key with the same properties share one type.
+          gives <code>Order</code>). Objects under the same key with the same properties, of the same types,
+          share one type.
         </p>
         <h3>Requirements</h3>
         <p>
           The code needs TypeScript 3.4 or later. It is tested by type-checking the sample JSON against it
-          with the TypeScript compiler, in strict mode.
+          with the TypeScript 6 compiler, in strict mode.
+        </p>
+        <h2>Questions</h2>
+        <h3>How do I use the types?</h3>
+        <p>
+          Type what you parse: <code>const order = JSON.parse(text) as Root;</code>, or
+          <code>await response.json() as Root</code>. The types describe the sample; they don't check data at
+          run time, so validate input you don't control.
+        </p>
+        <h3>Why is a property <code>unknown</code>?</h3>
+        <p>
+          Its values were all <code>null</code>, or of different kinds, so there was nothing to tell its type
+          from; an array that was always empty gives <code>unknown[]</code> for the same reason. The notes
+          under the code list each such place; a sample with a real value there gives a real type.
+        </p>
+        <h3>Is my JSON uploaded?</h3>
+        <p>
+          No. It is parsed and converted in your browser, and the page's security policy blocks every network
+          request from its scripts.
         </p>
       </article>
     </main>

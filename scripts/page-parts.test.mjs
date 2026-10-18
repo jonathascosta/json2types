@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fillParts, siteHeader, toolMarkup } from './page-parts.mjs';
+import { fillParts, pagePath, pageParts, siteHeader, toolMarkup } from './page-parts.mjs';
 
 describe('page parts', () => {
   it('marks the current page in the header', () => {
@@ -33,12 +33,47 @@ describe('page parts', () => {
 
   it('fills every marker of a page', () => {
     const page = fillParts(
-      '<body><!-- site-header --><!-- tool:typescript --><!-- site-footer --></body>',
+      '<body><!-- site-header --><main id="main"><!--tool:typescript--></main><!--  site-footer  --></body>',
       '/typescript/',
     );
-    expect(page).not.toContain('<!--');
+    expect(page).not.toMatch(/<!--\s*(site-|tool:)/);
     expect(page).toContain('aria-current="page">JSON to TypeScript');
-    expect(page).toContain('id="tool"');
+    expect(page).toContain('<a class="skip-link" href="#main">');
+    expect(page).toContain('<input type="hidden" name="language" value="typescript" />');
     expect(page).toContain('class="site-footer"');
+  });
+
+  it('leaves a page without a converter alone, but not one without a header or footer', () => {
+    expect(fillParts('<!-- site-header --><p>404</p><!-- site-footer -->', '/404.html')).not.toContain(
+      'id="tool"',
+    );
+    expect(() => fillParts('<p></p><!-- site-footer -->', '/x/')).toThrow('/x/: lacks <!-- site-header -->');
+    expect(() => fillParts('<!-- site-header --><p></p>', '/x/')).toThrow('/x/: lacks <!-- site-footer -->');
+  });
+
+  it('refuses a converter for a language it has none for', () => {
+    expect(() => fillParts('<!-- site-header --><!-- tool:java --><!-- site-footer -->', '/java/')).toThrow(
+      '/java/: no converter for "java"',
+    );
+  });
+
+  it('maps page files to the paths the site serves them at', () => {
+    expect(pagePath('/index.html')).toBe('/');
+    expect(pagePath('/csharp/index.html')).toBe('/csharp/');
+    expect(pagePath('/404.html')).toBe('/404.html');
+  });
+
+  it('fills pages through the Vite plugin, by their file', () => {
+    const plugin = pageParts();
+    const hook = plugin.transformIndexHtml;
+    if (!hook || typeof hook === 'function' || !('handler' in hook))
+      throw new Error('Expected a hook object');
+    const html = hook.handler.call(
+      /** @type {never} */ ({}),
+      '<!-- site-header --><!-- tool:csharp --><!-- site-footer -->',
+      /** @type {never} */ ({ path: '/csharp/index.html', filename: 'csharp/index.html' }),
+    );
+    expect(html).toContain('aria-current="page">JSON to C#');
+    expect(html).toContain('value="csharp"');
   });
 });
