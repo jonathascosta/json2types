@@ -80,12 +80,32 @@ describe('inferModel', () => {
     const items = (json: string) => (infer(json).root.type as { items: { type: unknown } }).items.type;
     expect(items('[2147483647, -2147483648]')).toEqual({ kind: 'integer', bits: 32 });
     expect(items('[1, 2147483648]')).toEqual({ kind: 'integer', bits: 64 });
-    expect(items('[1, -9223372036854775808]')).toEqual({ kind: 'integer', bits: 64 });
-    expect(items('[1, 9223372036854775808]')).toEqual({ kind: 'integer', bits: 128 });
-    expect(items('[1, -170141183460469231731687303715884105728]')).toEqual({ kind: 'integer', bits: 128 });
-    expect(items('[1, 170141183460469231731687303715884105727]')).toEqual({ kind: 'integer', bits: 128 });
-    expect(items('[1, 170141183460469231731687303715884105728]')).toEqual({ kind: 'integer', bits: 'big' });
-    expect(items('[2147483648, 9223372036854775808, 1]')).toEqual({ kind: 'integer', bits: 128 });
+    const unsafe = true;
+    expect(items('[1, -9223372036854775808]')).toEqual({ kind: 'integer', bits: 64, unsafe });
+    expect(items('[1, 9223372036854775808]')).toEqual({ kind: 'integer', bits: 128, unsafe });
+    expect(items('[1, -170141183460469231731687303715884105728]')).toEqual({
+      kind: 'integer',
+      bits: 128,
+      unsafe,
+    });
+    expect(items('[1, 170141183460469231731687303715884105727]')).toEqual({
+      kind: 'integer',
+      bits: 128,
+      unsafe,
+    });
+    expect(items('[1, 170141183460469231731687303715884105728]')).toEqual({
+      kind: 'integer',
+      bits: 'big',
+      unsafe,
+    });
+    expect(items('[2147483648, 9223372036854775808, 1]')).toEqual({ kind: 'integer', bits: 128, unsafe });
+  });
+
+  it('marks integers beyond ±2^53, which a JavaScript number skips some of', () => {
+    const items = (json: string) => (infer(json).root.type as { items: { type: unknown } }).items.type;
+    expect(items('[9007199254740991, -9007199254740991]')).toEqual({ kind: 'integer', bits: 64 });
+    expect(items('[1, 9007199254740992]')).toEqual({ kind: 'integer', bits: 64, unsafe: true });
+    expect(items('[-9007199254740992, 1]')).toEqual({ kind: 'integer', bits: 64, unsafe: true });
   });
 
   it('recognises strings that are always dates, date-times or GUIDs', () => {
@@ -315,7 +335,7 @@ describe('inferModel', () => {
     const start = performance.now();
     expect(infer(`[${huge}, ${huge}, ${huge}]`).root.type).toEqual({
       kind: 'array',
-      items: plain({ kind: 'integer', bits: 'big' }),
+      items: plain({ kind: 'integer', bits: 'big', unsafe: true }),
     });
     expect(performance.now() - start).toBeLessThan(3000);
   });
@@ -332,7 +352,7 @@ describe('inferModel', () => {
     const model = infer(`{"x":[${'9'.repeat(400)}, 1]}`);
     expect(property(model, 'Root', 'x')?.type).toEqual({
       kind: 'array',
-      items: plain({ kind: 'integer', bits: 'big' }),
+      items: plain({ kind: 'integer', bits: 'big', unsafe: true }),
     });
     expect(model.diagnostics).toEqual([]);
   });

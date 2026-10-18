@@ -15,8 +15,11 @@ export type TypeRef =
   | { readonly kind: 'date' }
   /** Strings that were always GUIDs, e.g. 3f2504e0-4f89-11d3-9a0c-0305e82c3301. */
   | { readonly kind: 'guid' }
-  /** Whole numbers; `bits` is the smallest signed size that holds every one seen, or 'big' past 128. */
-  | { readonly kind: 'integer'; readonly bits: 32 | 64 | 128 | 'big' }
+  /**
+   * Whole numbers; `bits` is the smallest signed size that holds every one seen, or 'big' past 128.
+   * `unsafe` is set when some are beyond ±2^53, where a double (a JavaScript number) skips some.
+   */
+  | { readonly kind: 'integer'; readonly bits: 32 | 64 | 128 | 'big'; readonly unsafe?: true }
   /**
    * Numbers with a fraction or an exponent, all within an exact decimal's range (±7.9×10²⁸, down to
    * 1e-28). Only the range is checked: digits beyond a decimal's 28–29 are rounded.

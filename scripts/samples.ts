@@ -1,0 +1,92 @@
+/** JSON samples the generated code is checked against, by tsc and by the .NET SDK. */
+export const SAMPLES: Record<string, string> = {
+  order: JSON.stringify({
+    id: 1042,
+    order_id: '3f2504e0-4f89-11d3-9a0c-0305e82c3301',
+    placed_at: '2026-10-18T12:30:00.1234567+01:00',
+    delivery_date: '2026-10-21',
+    customer: { first_name: 'Ana', last_name: 'Silva', email: null, vip: true },
+    lines: [
+      { sku: 'A-1', quantity: 2, unit_price: 9.9, tags: ['gift'] },
+      { sku: 'B-2', quantity: 1, unit_price: 120, discount: 0.15, tags: [] },
+    ],
+    total: 139.8,
+    notes: null,
+  }),
+  list: JSON.stringify([
+    { name: 'a', score: 1 },
+    { name: 'b', score: 2.5, extra: { deep: [1, null, 3] } },
+    { name: null, score: null },
+  ]),
+  // As text: JavaScript numbers would round the large ones.
+  numbers: `{
+    "small": [1, -2147483648, 2147483647],
+    "long": [2147483648, -9223372036854775808],
+    "huge": [123456789012345678901234567890, 1],
+    "mixed": [1, 2.5, -3e5],
+    "floating": [1e300, 2.5e-300],
+    "exact": 79228162514264337593543950335
+  }`,
+  names: JSON.stringify({
+    a: 1,
+    A: 2,
+    class: 'keyword',
+    '1st': true,
+    'first name': 'x',
+    名前: 'name',
+    'he said "hi"': 'quote',
+    'back\\slash': 'b',
+    'line break': 'l',
+    '': 'empty',
+    '😀': 'emoji',
+    ToString: 'inherited',
+    Equals: 'inherited',
+    user: { user: 'self', User: 'clash' },
+    system: { Newtonsoft: { json: 1 } },
+    string: { value: 's' },
+  }),
+  arrays: JSON.stringify({
+    matrix: [[1, 2], null, []],
+    deep: [[[true]], [[false, null]]],
+    nullable_items: [1, null, 3],
+    empty: [],
+    objects: [{ a: 1 }, { b: 'x' }, null],
+    strings: [['a'], null],
+  }),
+  dates: JSON.stringify({
+    zoned: ['2026-10-18T12:00:00Z', '2026-10-18T12:00:00+14:00'],
+    local: ['2026-10-18T12:00:00', '2026-10-18T23:59:59.9999999'],
+    mixed: ['2026-10-18T12:00:00Z', '2026-10-18T12:00:00', '2026-10-18'],
+    days: ['2026-10-18', '0001-01-01', '9999-12-31'],
+    ids: ['3F2504E0-4F89-11D3-9A0C-0305E82C3301'],
+  }),
+  scalar: '[1, 2, 3]',
+  // Names that are already C# names, so even the output without attributes reads them back.
+  pascal: JSON.stringify({
+    Id: 7,
+    Name: 'Ana',
+    Joined: '2026-10-18T12:00:00-03:00',
+    Address: { City: 'Porto', Zip: null },
+    Tags: ['a', null],
+    Orders: [{ Total: 9.5 }, { Total: 3, Note: 'x' }],
+  }),
+  // Names of DOM globals that aren't reserved: the TypeScript output must not merge with them.
+  dom: JSON.stringify({ screen: { width: 1 }, navigator: { online: true }, performance: { now: 1.5 } }),
+  // Keys that are quoted in TypeScript or need care in either language.
+  keys: JSON.stringify({
+    $id: 1,
+    _x: 2,
+    constructor: 'c',
+    __proto__x: 'p',
+    '1': 'one',
+    'a-b': 'dash',
+    '𝑥': 'astral',
+    'a\u202Eb': 'bidi',
+    'tab\there': 'tab',
+  }),
+  // As text: in a JavaScript object literal __proto__ would set the prototype instead.
+  proto: '{"__proto__": {"a": 1}, "b": 2}',
+  text: '"just a string"',
+  nothing: 'null',
+  rootList: '[[{"x": 1}], []]',
+};

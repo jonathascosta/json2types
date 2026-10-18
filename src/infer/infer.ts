@@ -438,7 +438,12 @@ class Resolver {
     }
     if (shape.numbers) {
       const { decimal, beyondDecimal, bits, infinite, underflows, unsafeInteger } = shape.numbers;
-      if (!decimal) return { type: { kind: 'integer', bits }, nullable };
+      if (!decimal) {
+        const type: TypeRef = unsafeInteger
+          ? { kind: 'integer', bits, unsafe: true }
+          : { kind: 'integer', bits };
+        return { type, nullable };
+      }
       // Only floating point loses these; integers of any size are kept whole.
       if (beyondDecimal && unsafeInteger) {
         this.diagnostics.add(
