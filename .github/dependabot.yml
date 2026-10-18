@@ -12,6 +12,13 @@ updates:
         dependency-type: development
         # Majors come in pull requests of their own, so one breaking change doesn't hold up the rest.
         update-types: [minor, patch]
+    ignore:
+      # typescript-eslint supports TypeScript below 6.1 only; lift this when it supports more.
+      - dependency-name: typescript
+        versions: ['>=6.1.0']
+      # The Node types follow the Node line the site deploys from (.nvmrc), not the newest one.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     schedule:
