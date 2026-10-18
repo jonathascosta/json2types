@@ -1,6 +1,8 @@
 /**
  * C# from the inferred model: one record or class per object type, with System.Text.Json or
- * Newtonsoft.Json attributes where a member's name differs from its JSON name.
+ * Newtonsoft.Json attributes where a member's name differs from its JSON name. The output needs
+ * C# 12 and .NET 8 or later (collection expressions, DateOnly, Int128), and Newtonsoft.Json 13.0.2
+ * or later for DateOnly.
  */
 import type { Model, ObjectDeclaration, Property, PropertyType, TypeRef } from '../infer';
 
@@ -9,13 +11,15 @@ export interface CSharpOptions {
   readonly kind?: 'record' | 'class';
   /**
    * Which serializer's attributes to write when a member's name differs from its JSON name. Also
-   * picks the type for integers beyond 64 bits: Int128 for System.Text.Json (and none), BigInteger
-   * for Newtonsoft, the only one each reads. Default: systemTextJson.
+   * picks the type for integers beyond 64 bits, as each serializer reads them: BigInteger for
+   * Newtonsoft; Int128 for System.Text.Json (and none), or double past Int128, with a comment.
+   * Default: systemTextJson.
    */
   readonly attributes?: 'systemTextJson' | 'newtonsoft' | 'none';
   /**
    * Nullable reference types: `string?` for strings that may be null or missing, and initialisers
-   * on the rest so that none is left null. Default: true.
+   * on the rest so that none is left null. The output says `#nullable enable` or `#nullable disable`,
+   * so it means the same whatever the project's setting. Default: true.
    */
   readonly nullable?: boolean;
   /** `List<T>` or `T[]`. Default: list. */
@@ -39,6 +43,8 @@ type Settings = Required<CSharpOptions>;
 
 class Writer {
   private readonly usings = new Set<string>();
+  /** Set when a type just written reads integers as double, which rounds them. */
+  private rounded = false;
 
   constructor(private readonly settings: Settings) {}
 
@@ -46,23 +52,21 @@ class Writer {
     const body: string[] = [];
     // Only an object root is deserialised as the root type itself; say how to read anything else.
     if (model.root.type.kind !== 'object') {
-      // Only a comment: whatever usings the type would need, the code doesn't.
-      const usings = [...this.usings];
       const type = this.type(model.root);
+      // Only a comment: whatever usings the type needs, the code doesn't.
       this.usings.clear();
-      for (const using of usings) this.usings.add(using);
-      body.push(
+      const comment =
         model.declarations.length > 0
           ? `// Deserialise the JSON as ${type}.`
-          : `// The JSON holds no objects: deserialise it as ${type}.`,
-      );
+          : `// There are no types to declare: deserialise the JSON as ${type}.`;
+      body.push(this.rounded ? `${ROUNDED}\n${comment}` : comment);
     }
     for (const declaration of model.declarations) body.push(this.declaration(declaration));
     // Nothing to declare, so nothing for usings or a namespace to apply to.
     if (model.declarations.length === 0) return body.join('\n\n') + '\n';
 
     const header: string[] = [];
-    if (this.settings.nullable) header.push('#nullable enable');
+    header.push(this.settings.nullable ? '#nullable enable' : '#nullable disable');
     if (this.usings.size > 0) {
       // System first, then alphabetical: the order dotnet format and Visual Studio sort into.
       const usings = [...this.usings].sort((a, b) =>
@@ -101,7 +105,9 @@ class Writer {
     // A property missing from some objects reads as null there, like one that was null.
     const type = { type: property.type, nullable: property.nullable || property.optional };
     const accessors = this.settings.kind === 'record' ? '{ get; init; }' : '{ get; set; }';
-    lines.push(`    public ${this.type(type)} ${property.name} ${accessors}${this.initialiser(type)}`);
+    const typeName = this.type(type);
+    if (this.rounded) lines.push(`    ${ROUNDED}`);
+    lines.push(`    public ${typeName} ${property.name} ${accessors}${this.initialiser(type)}`);
     return lines;
   }
 
@@ -120,7 +126,13 @@ class Writer {
     }
   }
 
-  private type({ type, nullable }: PropertyType): string {
+  /** The C# type; sets `rounded` if it holds integers that only fit a double. */
+  private type(type: PropertyType): string {
+    this.rounded = false;
+    return this.nullableType(type);
+  }
+
+  private nullableType({ type, nullable }: PropertyType): string {
     const name = this.typeName(type);
     // Anything may stand where nothing could be inferred, null included.
     if (type.kind === 'any') return this.settings.nullable ? `${name}?` : name;
@@ -149,8 +161,12 @@ class Writer {
           this.usings.add('System.Numerics');
           return 'BigInteger';
         }
-        this.usings.add('System');
-        return 'Int128';
+        if (type.bits === 128) {
+          this.usings.add('System');
+          return 'Int128';
+        }
+        this.rounded = true;
+        return 'double';
       case 'decimal':
         return 'decimal';
       case 'float':
@@ -160,8 +176,10 @@ class Writer {
       case 'any':
         return 'object';
       case 'array': {
-        const items = this.type(type.items);
-        if (this.settings.collection === 'array') return arrayOf(items);
+        const items = this.nullableType(type.items);
+        // The element's own brackets and annotations stay as they are and the new rank goes after
+        // them: an array of `int[]?` is `int[]?[]`, a non-null array of nullable `int[]`.
+        if (this.settings.collection === 'array') return `${items}[]`;
         this.usings.add('System.Collections.Generic');
         return `List<${items}>`;
       }
@@ -171,17 +189,11 @@ class Writer {
   }
 }
 
+/** Above a member whose integers System.Text.Json can only read as double. */
+const ROUNDED = '// Integers here go past Int128, so they are read as double, which rounds them.';
+
 function isValueType(type: TypeRef): boolean {
   return !['string', 'any', 'array', 'object'].includes(type.kind);
-}
-
-/**
- * An array of the given element type: the element's own brackets and annotations stay as they are
- * and the new rank goes after them. An array of `int[]?` is `int[]?[]`, which C# reads as a
- * non-null array of nullable `int[]`.
- */
-function arrayOf(element: string): string {
-  return `${element}[]`;
 }
 
 /** C#'s reserved keywords: an identifier spelled like one needs an @. */
@@ -192,7 +204,7 @@ const KEYWORDS = new Set(
     'implicit in int interface internal is lock long namespace new null object operator out override ' +
     'params private protected public readonly ref return sbyte sealed short sizeof stackalloc static ' +
     'string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using virtual ' +
-    'void volatile while global'
+    'void volatile while global __arglist __makeref __reftype __refvalue'
   ).split(' '),
 );
 

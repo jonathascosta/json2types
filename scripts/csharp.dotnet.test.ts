@@ -72,6 +72,15 @@ const SAMPLES: Record<string, string> = {
     ids: ['3F2504E0-4F89-11D3-9A0C-0305E82C3301'],
   }),
   scalar: '[1, 2, 3]',
+  // Names that are already C# names, so even the output without attributes reads them back.
+  pascal: JSON.stringify({
+    Id: 7,
+    Name: 'Ana',
+    Joined: '2026-10-18T12:00:00-03:00',
+    Address: { City: 'Porto', Zip: null },
+    Tags: ['a', null],
+    Orders: [{ Total: 9.5 }, { Total: 3, Note: 'x' }],
+  }),
   text: '"just a string"',
   nothing: 'null',
   rootList: '[[{"x": 1}], []]',
@@ -84,7 +93,14 @@ for (const kind of ['class', 'record'] as const)
       for (const collection of ['list', 'array'] as const)
         COMBINATIONS.push({ kind, attributes, nullable, collection });
 
-const SERIALIZER = { systemTextJson: 'stj', newtonsoft: 'newtonsoft', none: 'none' } as const;
+/** Samples whose names need no attributes: without them, these are still compared. */
+const EXACT_NAMES = new Set(['pascal', 'scalar', 'text', 'nothing']);
+
+/** How Harness.Verify reads a case: "read" only checks that System.Text.Json reads it. */
+function serializer(sample: string, attributes: CSharpOptions['attributes']): string {
+  if (attributes === 'newtonsoft') return 'newtonsoft';
+  return attributes === 'none' && !EXACT_NAMES.has(sample) ? 'read' : 'stj';
+}
 
 const work = mkdtempSync(join(tmpdir(), 'json2types-dotnet-'));
 afterAll(() => {
@@ -93,8 +109,7 @@ afterAll(() => {
 
 /** The type to deserialise the root as: the root declaration, or what the comment says. */
 function rootType(code: string, rootName: string): string {
-  const comment =
-    /^\/\/ (?:Deserialise the JSON as|The JSON holds no objects: deserialise it as) (.+)\.$/m.exec(code);
+  const comment = /^\/\/ .*deserialise the JSON as (.+)\.$/im.exec(code);
   return comment?.[1] ?? rootName;
 }
 
@@ -110,7 +125,7 @@ interface Case {
  * Builds one project from the cases and runs it. A case's check sits in a file of its own, in the
  * case's namespace, so the generated file compiles with its own usings only.
  */
-function run(project: string, cases: Case[]): string {
+function run(project: string, cases: Case[], projectDefaults = false): string {
   const dir = join(work, project);
   mkdirSync(dir, { recursive: true });
   for (const file of ['Harness.csproj', 'Harness.cs'])
@@ -127,10 +142,13 @@ function run(project: string, cases: Case[]): string {
   const options = {
     cwd: dir,
     encoding: 'utf8' as const,
-    env: { ...process.env, DOTNET_CLI_TELEMETRY_OPTOUT: '1', DOTNET_NOLOGO: '1' },
+    // Away from UTC, so values read as local time are told apart from UTC ones.
+    env: { ...process.env, DOTNET_CLI_TELEMETRY_OPTOUT: '1', DOTNET_NOLOGO: '1', TZ: 'America/Sao_Paulo' },
   };
+  // What `dotnet new` turns on, where most generated code ends up.
+  const defaults = projectDefaults ? ['-p:Nullable=enable', '-p:ImplicitUsings=enable'] : [];
   try {
-    execFileSync('dotnet', ['build', '-nologo', '-v', 'quiet', '-clp:ErrorsOnly'], options);
+    execFileSync('dotnet', ['build', '-nologo', '-v', 'quiet', '-clp:ErrorsOnly', ...defaults], options);
     return execFileSync('dotnet', ['run', '--no-build'], options);
   } catch (error) {
     const { stdout, stderr } = error as { stdout?: string; stderr?: string };
@@ -138,7 +156,7 @@ function run(project: string, cases: Case[]): string {
   }
 }
 
-function makeCase(name: string, json: string, options: CSharpOptions, index: number): Case {
+function makeCase(name: string, json: string, options: CSharpOptions, index: number, reader: string): Case {
   const rootName = 'Root';
   const code = generateCSharp(inferModel(parseJson(json), { rootName }), options);
   const namespace = namespaceName(options.namespace ?? '');
@@ -146,13 +164,12 @@ function makeCase(name: string, json: string, options: CSharpOptions, index: num
     .map((u) => `using ${u};`)
     .join('\n');
   const ns = namespace === '' ? '' : `namespace ${namespace};\n\n`;
-  const serializer = SERIALIZER[options.attributes ?? 'systemTextJson'];
   // A verbatim string: only quotes need doubling.
   const literal = `@"${json.replaceAll('"', '""')}"`;
   const check =
     `${options.nullable === false ? '' : '#nullable enable\n\n'}${usings}\n\n${ns}` +
     `public static class Check${String(index)}\n{\n    public static void Run() =>\n` +
-    `        JsonHarness.Harness.Verify<${rootType(code, rootName)}>(${JSON.stringify(name)}, "${serializer}", ${literal});\n}\n`;
+    `        JsonHarness.Harness.Verify<${rootType(code, rootName)}>(${JSON.stringify(name)}, "${reader}", ${literal});\n}\n`;
   return {
     name,
     code,
@@ -161,19 +178,32 @@ function makeCase(name: string, json: string, options: CSharpOptions, index: num
   };
 }
 
-describe('generated C#', () => {
-  it('compiles without warnings and reads every sample back, with every option', () => {
-    const cases: Case[] = [];
-    for (const [sample, json] of Object.entries(SAMPLES)) {
-      COMBINATIONS.forEach((options) => {
-        const index = cases.length;
-        const name = `${sample} ${options.kind ?? ''} ${options.attributes ?? ''} nullable=${String(options.nullable)} ${options.collection ?? ''}`;
-        // Every case in its own namespace, so the same type names don't meet; some need fixing.
-        const namespace = index % 3 === 0 ? `Cases.N${String(index)}` : `cases.${String(index)}th.class`;
-        cases.push(makeCase(name, json, { ...options, namespace }, index));
-      });
+function matrix(): Case[] {
+  const cases: Case[] = [];
+  const add = (sample: string, json: string, options: CSharpOptions, reader: string) => {
+    const index = cases.length;
+    const name = `${sample} ${options.kind ?? ''} ${options.attributes ?? ''} nullable=${String(options.nullable)} ${options.collection ?? ''} ${reader}`;
+    // Every case in its own namespace, so the same type names don't meet; some need fixing.
+    const namespace = index % 3 === 0 ? `Cases.N${String(index)}` : `cases.${String(index)}th.class`;
+    cases.push(makeCase(name, json, { ...options, namespace }, index, reader));
+  };
+  for (const [sample, json] of Object.entries(SAMPLES)) {
+    for (const options of COMBINATIONS) {
+      add(sample, json, options, serializer(sample, options.attributes));
+      // Output without attributes is for either serializer.
+      if (options.attributes === 'none' && sample === 'pascal') add(sample, json, options, 'newtonsoft');
     }
-    const output = run('namespaced', cases);
+  }
+  return cases;
+}
+
+describe('generated C#', () => {
+  it.each([
+    ['nullable and implicit usings off', false],
+    ['the defaults of dotnet new', true],
+  ])('compiles without warnings and reads every sample back, with every option, with %s', (_, defaults) => {
+    const cases = matrix();
+    const output = run(defaults ? 'defaults' : 'strict', cases, defaults);
     expect(output).toContain(`${String(cases.length)} of ${String(cases.length)} cases read back intact`);
   });
 
@@ -181,7 +211,13 @@ describe('generated C#', () => {
     'compiles in the global namespace with %s',
     (attributes) => {
       const output = run(`global-${attributes}`, [
-        makeCase(`names global ${attributes}`, SAMPLES.names, { attributes }, 0),
+        makeCase(
+          `names global ${attributes}`,
+          SAMPLES.names,
+          { attributes },
+          0,
+          serializer('names', attributes),
+        ),
       ]);
       expect(output).toContain('1 of 1 cases read back intact');
     },

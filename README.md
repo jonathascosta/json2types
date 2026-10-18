@@ -5,6 +5,9 @@ entirely in your browser: nothing you paste is sent anywhere.
 
 Live at [json2types.jonathas.net](https://json2types.jonathas.net) (coming soon).
 
+The C# it writes needs C# 12 and .NET 8 or later, with System.Text.Json or Newtonsoft.Json 13.0.2
+or later.
+
 Planning lives in this repository's [issues](https://github.com/jonathascosta/json2types/issues)
 and [milestones](https://github.com/jonathascosta/json2types/milestones): one milestone per sprint.
 

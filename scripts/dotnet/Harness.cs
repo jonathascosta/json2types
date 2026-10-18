@@ -7,13 +7,15 @@ using System.Linq;
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace JsonHarness;
 
 /// <summary>
 /// Reads each case's JSON into its generated types, writes it back, and checks that nothing was
-/// lost: every value comes back where it was, equal as a number, date or GUID where the text may
-/// differ. Without attributes the names don't match, so those cases only have to read.
+/// lost: every value comes back where it was, the same text, or the same number, GUID, or date,
+/// time and offset where the text may differ. Cases whose names only match with attributes they
+/// lack ("read") only have to read.
 /// </summary>
 public static class Harness
 {
@@ -33,10 +35,11 @@ public static class Harness
             }
             else
             {
+                // "read": System.Text.Json, only reading, for names written without attributes.
                 var value = JsonSerializer.Deserialize<T>(json);
                 written = JsonSerializer.Serialize(value);
             }
-            if (serializer == "none") return;
+            if (serializer == "read") return;
             var difference = Compare(JsonNode.Parse(json), JsonNode.Parse(written), "$");
             if (difference != null) Failures.Add($"{name}: {difference}\n  wrote {written}");
         }
@@ -92,26 +95,45 @@ public static class Harness
         switch (e.ValueKind)
         {
             case JsonValueKind.Number:
-                var (et, at) = (e.GetRawText(), a.GetRawText());
-                if (et == at) return true;
-                const NumberStyles style = NumberStyles.Float;
-                if (decimal.TryParse(et, style, CultureInfo.InvariantCulture, out var ed)
-                    && decimal.TryParse(at, style, CultureInfo.InvariantCulture, out var ad))
-                    return ed == ad;
-                if (BigInteger.TryParse(et, CultureInfo.InvariantCulture, out var eb)
-                    && BigInteger.TryParse(at, CultureInfo.InvariantCulture, out var ab))
-                    return eb == ab;
-                return double.Parse(et, CultureInfo.InvariantCulture) == double.Parse(at, CultureInfo.InvariantCulture);
+                return Canonical(e.GetRawText()) == Canonical(a.GetRawText());
             case JsonValueKind.String:
                 var (es, @as) = (e.GetString()!, a.GetString()!);
                 if (es == @as) return true;
-                if (Guid.TryParse(es, out var eg) && Guid.TryParse(@as, out var ag)) return eg == ag;
-                const DateTimeStyles dates = DateTimeStyles.AssumeLocal;
-                return DateTimeOffset.TryParse(es, CultureInfo.InvariantCulture, dates, out var edt)
-                    && DateTimeOffset.TryParse(@as, CultureInfo.InvariantCulture, dates, out var adt)
-                    && edt == adt;
+                if (GuidText.IsMatch(es)) return Guid.TryParse(@as, out var g) && g == Guid.Parse(es);
+                return SameDate(es, @as);
             default:
                 return e.GetRawText() == a.GetRawText();
         }
+    }
+
+    private static readonly Regex GuidText = new(@"^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$");
+    private static readonly Regex NumberText = new(@"^(-?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$");
+    private static readonly Regex Offset = new(@"(Z|[+-]\d\d:\d\d)$");
+
+    /// <summary>A number's exact value as text, however it was written: 1.50, 15e-1 → 15e-1.</summary>
+    private static string Canonical(string raw)
+    {
+        var match = NumberText.Match(raw);
+        if (!match.Success) return raw;
+        var digits = (match.Groups[2].Value + match.Groups[3].Value).TrimStart('0');
+        var exponent = BigInteger.Parse(match.Groups[4].Success ? match.Groups[4].Value : "0", CultureInfo.InvariantCulture)
+            - match.Groups[3].Value.Length;
+        if (digits.Length == 0) return "0";
+        var trimmed = digits.TrimEnd('0');
+        exponent += digits.Length - trimmed.Length;
+        return $"{match.Groups[1].Value}{trimmed}e{exponent}";
+    }
+
+    /// <summary>
+    /// The same date and time of day, and the same offset if the original had one. Written back,
+    /// a value without an offset gains the local one, and a date gains midnight.
+    /// </summary>
+    private static bool SameDate(string expected, string actual)
+    {
+        const DateTimeStyles style = DateTimeStyles.None;
+        if (!DateTimeOffset.TryParse(expected, CultureInfo.InvariantCulture, style, out var e)
+            || !DateTimeOffset.TryParse(actual, CultureInfo.InvariantCulture, style, out var a))
+            return false;
+        return e.DateTime == a.DateTime && (!Offset.IsMatch(expected) || e.Offset == a.Offset);
     }
 }

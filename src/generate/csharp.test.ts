@@ -89,6 +89,8 @@ describe('generateCSharp', () => {
   it('leaves nullable reference types off: no ? on references, no initialisers', () => {
     expect(csharp(SAMPLE, { nullable: false, attributes: 'none' })).toBe(
       lines(
+        '#nullable disable',
+        '',
         'using System.Collections.Generic;',
         '',
         'public class Root',
@@ -181,8 +183,39 @@ describe('generateCSharp', () => {
     ]);
     // Newtonsoft reads integers beyond 64 bits as BigInteger, and not Int128.
     expect(types({ attributes: 'newtonsoft' })[8]).toBe('BigInteger');
+    expect(types({ nullable: false })[8]).toBe('Int128');
     expect(csharp(json, { attributes: 'newtonsoft' })).toContain(
       'using System;\nusing System.Collections.Generic;\nusing System.Numerics;\nusing Newtonsoft.Json;\n',
+    );
+  });
+
+  it('reads integers past Int128 as double with System.Text.Json, saying they are rounded', () => {
+    const json = '{"a": [1, 170141183460469231731687303715884105728], "b": 1}';
+    expect(csharp(json, { attributes: 'none' })).toBe(
+      lines(
+        '#nullable enable',
+        '',
+        'using System.Collections.Generic;',
+        '',
+        'public class Root',
+        '{',
+        '    // Integers here go past Int128, so they are read as double, which rounds them.',
+        '    public List<double> A { get; set; } = [];',
+        '    public int B { get; set; }',
+        '}',
+      ),
+    );
+    expect(csharp(json, { attributes: 'newtonsoft' })).toContain(
+      '    public List<BigInteger> A { get; set; } = [];\n',
+    );
+    expect(csharp(json, { attributes: 'newtonsoft' })).not.toContain('rounds');
+    expect(
+      csharp('[1e40, 3e39]'.replace(/(\d)e(\d+)/g, (_, d: string, e: string) => d + '0'.repeat(Number(e)))),
+    ).toBe(
+      lines(
+        '// Integers here go past Int128, so they are read as double, which rounds them.',
+        '// There are no types to declare: deserialise the JSON as List<double>.',
+      ),
     );
   });
 
@@ -213,13 +246,16 @@ describe('generateCSharp', () => {
 
   it('writes only a comment when there is nothing to declare', () => {
     expect(csharp('[1, 2]', { namespace: 'A' })).toBe(
-      '// The JSON holds no objects: deserialise it as List<int>.\n',
+      '// There are no types to declare: deserialise the JSON as List<int>.\n',
     );
-    expect(csharp('null')).toBe('// The JSON holds no objects: deserialise it as object?.\n');
+    expect(csharp('null')).toBe('// There are no types to declare: deserialise the JSON as object?.\n');
     expect(csharp('null', { nullable: false })).toBe(
-      '// The JSON holds no objects: deserialise it as object.\n',
+      '// There are no types to declare: deserialise the JSON as object.\n',
     );
-    expect(csharp('"x"')).toBe('// The JSON holds no objects: deserialise it as string.\n');
+    expect(csharp('[1, {"a": 1}]')).toBe(
+      '// There are no types to declare: deserialise the JSON as List<object?>.\n',
+    );
+    expect(csharp('"x"')).toBe('// There are no types to declare: deserialise the JSON as string.\n');
   });
 
   it('uses the member names the model gives, with the JSON names in attributes', () => {
@@ -270,6 +306,7 @@ describe('namespaceName', () => {
     ['global.System', '@global.System'],
     ['x-y.😀z', 'x_y._z'],
     ['_private', '_private'],
+    ['Foo.__arglist.__makeref.__reftype.__refvalue', 'Foo.@__arglist.@__makeref.@__reftype.@__refvalue'],
   ])('%j → %j', (input, expected) => {
     expect(namespaceName(input)).toBe(expected);
   });

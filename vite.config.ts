@@ -34,7 +34,7 @@ export default defineConfig({
       {
         // Needs the .NET SDK and takes a while: `npm run test:dotnet`.
         extends: true,
-        test: { name: 'dotnet', include: ['scripts/**/*.dotnet.test.ts'], testTimeout: 600_000 },
+        test: { name: 'dotnet', include: ['scripts/**/*.dotnet.test.ts'], testTimeout: 300_000 },
       },
     ],
   },
