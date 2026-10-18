@@ -76,12 +76,16 @@ describe('inferModel', () => {
     expect(infer('1e3').root.type).toEqual({ kind: 'decimal' });
   });
 
-  it('widens integers that do not fit in 32 bits, or in 64', () => {
+  it('widens integers that do not fit in 32 bits, 64 or 128', () => {
     const items = (json: string) => (infer(json).root.type as { items: { type: unknown } }).items.type;
     expect(items('[2147483647, -2147483648]')).toEqual({ kind: 'integer', bits: 32 });
     expect(items('[1, 2147483648]')).toEqual({ kind: 'integer', bits: 64 });
     expect(items('[1, -9223372036854775808]')).toEqual({ kind: 'integer', bits: 64 });
-    expect(items('[1, 9223372036854775808]')).toEqual({ kind: 'integer', bits: 'big' });
+    expect(items('[1, 9223372036854775808]')).toEqual({ kind: 'integer', bits: 128 });
+    expect(items('[1, -170141183460469231731687303715884105728]')).toEqual({ kind: 'integer', bits: 128 });
+    expect(items('[1, 170141183460469231731687303715884105727]')).toEqual({ kind: 'integer', bits: 128 });
+    expect(items('[1, 170141183460469231731687303715884105728]')).toEqual({ kind: 'integer', bits: 'big' });
+    expect(items('[2147483648, 9223372036854775808, 1]')).toEqual({ kind: 'integer', bits: 128 });
   });
 
   it('recognises strings that are always dates, date-times or GUIDs', () => {

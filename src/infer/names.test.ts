@@ -205,5 +205,7 @@ describe('avoidReserved', () => {
     expect(avoidReserved('Error')).toBe('ErrorItem');
     expect(avoidReserved('Response')).toBe('ResponseItem');
     expect(avoidReserved('Order')).toBe('Order');
+    // A global class Newtonsoft would hide the namespace in `using Newtonsoft.Json;`.
+    expect(avoidReserved('Newtonsoft')).toBe('NewtonsoftItem');
   });
 });

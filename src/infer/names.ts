@@ -6,7 +6,8 @@
 /**
  * Names that would shadow a built-in or very common type in C# or TypeScript (`class String`,
  * `interface Date`) and confuse anyone reading the generated code, plus the attributes the C#
- * output writes (a class JsonPropertyName would make [JsonPropertyName] ambiguous, CS1614).
+ * output writes (a class JsonPropertyName would make [JsonPropertyName] ambiguous, CS1614) and the
+ * namespaces it uses (a global class Newtonsoft would hide the one in `using Newtonsoft.Json;`).
  * Deliberately not exhaustive:
  * the TypeScript output is a module, so other globals aren't merged into.
  */
@@ -89,6 +90,7 @@ const RESERVED = new Set([
   'Map',
   'Math',
   'Memory',
+  'Newtonsoft',
   'Node',
   'NonNullable',
   'Nullable',

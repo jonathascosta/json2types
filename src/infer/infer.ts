@@ -130,7 +130,7 @@ interface NumberShape {
   underflows: boolean;
   /** Some value is beyond what an exact decimal holds (±79228162514264337593543950335). */
   beyondDecimal: boolean;
-  bits: 32 | 64 | 'big';
+  bits: 32 | 64 | 128 | 'big';
 }
 
 interface ObjectShape {
@@ -191,6 +191,7 @@ function temporalKind(value: string): 'date' | 'offset' | 'local' | null {
 
 const INT32 = 2n ** 31n;
 const INT64 = 2n ** 63n;
+const INT128 = 2n ** 127n;
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 /** The largest magnitude System.Text.Json reads into a C# decimal. */
 const DECIMAL_MAX = 79228162514264337593543950335n;
@@ -248,16 +249,17 @@ function numberShape(raw: string): NumberShape {
   // By digit count first, so a million-digit integer doesn't go through BigInt.
   const length = raw.replace(/^-/, '').length;
   if (length <= 9) return integer(32);
-  if (length > 29) return integer('big', true, true);
+  if (length > 39) return integer('big', true, true);
   const value = BigInt(raw);
   const unsafe = value > MAX_SAFE || value < -MAX_SAFE;
   if (value >= -INT32 && value < INT32) return integer(32);
   if (value >= -INT64 && value < INT64) return integer(64, false, unsafe);
-  return integer('big', value > DECIMAL_MAX || value < -DECIMAL_MAX, unsafe);
+  const beyond = value > DECIMAL_MAX || value < -DECIMAL_MAX;
+  return integer(value >= -INT128 && value < INT128 ? 128 : 'big', beyond, unsafe);
 }
 
 const widerBits = (a: NumberShape['bits'], b: NumberShape['bits']): NumberShape['bits'] =>
-  a === 'big' || b === 'big' ? 'big' : a === 64 || b === 64 ? 64 : 32;
+  a === 'big' || b === 'big' ? 'big' : a === 128 || b === 128 ? 128 : a === 64 || b === 64 ? 64 : 32;
 
 function addSample(shape: Shape, value: JsonValue, diagnostics: Diagnostics): void {
   shape.count++;
