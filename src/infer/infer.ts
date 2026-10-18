@@ -98,6 +98,8 @@ interface ObjectShape {
   /** Objects merged here. */
   count: number;
   fields: Map<string, Shape>;
+  /** The keys as shown in paths, so two long keys cut to the same text are told apart. */
+  shown: Set<string>;
 }
 
 interface ArrayShape {
@@ -251,12 +253,22 @@ function addSample(shape: Shape, value: JsonValue, diagnostics: Diagnostics): vo
       return;
     }
     case 'object': {
-      const object = (shape.object ??= { count: 0, fields: new Map<string, Shape>() });
+      const object = (shape.object ??= {
+        count: 0,
+        fields: new Map<string, Shape>(),
+        shown: new Set<string>(),
+      });
       object.count++;
       const fieldFor = (key: string): Shape => {
         let field = object.fields.get(key);
         if (!field) {
-          field = newShape(propertyPath(shape.path, key));
+          let shown = shownKey(key);
+          if (shown !== key || object.shown.has(shown)) {
+            const base = shown;
+            for (let n = 2; object.shown.has(shown); n++) shown = `${base}#${String(n)}`;
+          }
+          object.shown.add(shown);
+          field = newShape(propertyPath(shape.path, shown));
           object.fields.set(key, field);
         }
         return field;
@@ -279,17 +291,23 @@ function addSample(shape: Shape, value: JsonValue, diagnostics: Diagnostics): vo
   }
 }
 
-/** A key as shown in paths and messages: long ones are cut short, so deep paths stay readable. */
+/**
+ * A key as shown in paths and messages: lone surrogates replaced (JSONPath can't hold them), and
+ * long keys cut to their first 30 and last 10 code points, so deep paths stay readable. Keys that
+ * still meet in one object are numbered where their fields are created (…#2).
+ */
 function shownKey(key: string): string {
-  if (key.length <= 40) return key;
-  // The start and the end, cut on code points, so keys that share a long prefix still differ.
-  const chars = Array.from(key);
-  return chars.length <= 40 ? key : `${chars.slice(0, 30).join('')}…${chars.slice(-10).join('')}`;
+  const wellFormed = key.replace(
+    /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,
+    '\uFFFD',
+  );
+  if (wellFormed.length <= 40) return wellFormed;
+  const chars = Array.from(wellFormed);
+  return chars.length <= 40 ? wellFormed : `${chars.slice(0, 30).join('')}…${chars.slice(-10).join('')}`;
 }
 
 /** RFC 9535 JSONPath: dot notation for simple names, brackets for the rest. */
-function propertyPath(path: string, key: string): string {
-  const shown = shownKey(key);
+function propertyPath(path: string, shown: string): string {
   return /^[A-Za-z_][A-Za-z0-9_]*$/.test(shown) ? `${path}.${shown}` : `${path}[${JSON.stringify(shown)}]`;
 }
 
@@ -348,7 +366,13 @@ class Resolver {
       return { type: { kind: 'any' }, nullable };
     }
 
-    if (shape.strings) return { type: stringType(shape.strings), nullable };
+    if (shape.strings) {
+      const type = stringType(shape.strings);
+      if (type.kind === 'dateTime' && type.offset === 'mixed') {
+        this.diagnostics.add(shape, 'info', "Some date-times here carry a time zone and some don't.");
+      }
+      return { type, nullable };
+    }
     if (shape.numbers) {
       const { decimal, beyondDecimal, bits, infinite, underflows } = shape.numbers;
       if (!decimal) return { type: { kind: 'integer', bits }, nullable };

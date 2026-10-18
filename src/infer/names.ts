@@ -5,7 +5,8 @@
 
 /**
  * Names that would shadow a built-in or very common type in C# or TypeScript (`class String`,
- * `interface Date`) and confuse anyone reading the generated code.
+ * `interface Date`) and confuse anyone reading the generated code. Deliberately not exhaustive:
+ * the TypeScript output is a module, so other globals aren't merged into.
  */
 const RESERVED = new Set([
   'Action',
@@ -236,6 +237,9 @@ const IRREGULAR = new Map(
     phenomena: 'phenomenon',
     axes: 'axis',
     apis: 'api',
+    hippies: 'hippie',
+    genies: 'genie',
+    aunties: 'auntie',
     zeroes: 'zero',
     gasses: 'gas',
     fezes: 'fez',

@@ -97,6 +97,18 @@ describe('inferModel', () => {
     ]);
   });
 
+  it('tells when some date-times carry a time zone and some do not', () => {
+    const model = infer('{"at":["2026-10-18T12:00:00Z","2026-10-18T12:00:00"]}');
+    expect(model.diagnostics).toEqual([
+      {
+        path: '$.at[*]',
+        severity: 'info',
+        message: "Some date-times here carry a time zone and some don't.",
+        count: 1,
+      },
+    ]);
+  });
+
   it('records mixed offsets, and widens dates mixed with date-times to date-times', () => {
     const model = infer(
       '[{"a":"2026-10-18T12:00:00Z","b":"2026-10-18"},{"a":"2026-10-18T12:00:00","b":"2026-10-18T12:00:00Z"}]',
@@ -120,6 +132,8 @@ describe('inferModel', () => {
     ['an offset without a colon', '2026-10-18T12:00:00+0100'],
     ['an out-of-range offset', '2026-10-18T12:00:00+99:99'],
     ['an hour of 24', '2026-10-18T24:00:00Z'],
+    ['a lowercase t', '2026-10-18t12:00:00Z'],
+    ['a lowercase z', '2026-10-18T12:00:00z'],
     ['more than sixteen fraction digits', '2026-10-18T12:00:00.12345678901234567Z'],
     ['an offset beyond 14 hours', '2026-10-18T12:00:00+14:01'],
     ['year 0, before .NET dates begin', '0000-01-01T00:00:00Z'],
@@ -401,6 +415,16 @@ describe('inferModel', () => {
     // Keys that share a long start still show differently.
     const twins = infer(`{"${'x'.repeat(50)}1":[null],"${'x'.repeat(50)}2":[null]}`);
     expect(new Set(twins.diagnostics.map((d) => d.path)).size).toBe(2);
+    // Keys that shorten to the same text in one object are numbered.
+    const a = `${'a'.repeat(30)}${'X'.repeat(20)}${'b'.repeat(10)}`;
+    const b = `${'a'.repeat(30)}${'Y'.repeat(20)}${'b'.repeat(10)}`;
+    const clash = infer(`{"${a}":[null],"${b}":[null]}`);
+    expect(clash.diagnostics.map((d) => d.path)).toEqual([
+      `$["${'a'.repeat(30)}…${'b'.repeat(10)}"][*]`,
+      `$["${'a'.repeat(30)}…${'b'.repeat(10)}#2"][*]`,
+    ]);
+    // Lone surrogates can't appear in a JSONPath; they're shown as U+FFFD.
+    expect(infer(String.raw`{"\ud800x":[null]}`).diagnostics[0]?.path).toBe('$["\uFFFDx"][*]');
     // Cut on code points: no half of an emoji left behind.
     const emoji = infer(`{"${'😀'.repeat(50)}":[null]}`);
     expect(emoji.diagnostics[0]?.path).toBe(`$["${'😀'.repeat(30)}…${'😀'.repeat(10)}"][*]`);

@@ -17,7 +17,10 @@ export type TypeRef =
   | { readonly kind: 'guid' }
   /** Whole numbers; `bits` is the smallest signed size that holds every one seen. */
   | { readonly kind: 'integer'; readonly bits: 32 | 64 | 'big' }
-  /** Numbers with a fraction or an exponent, all within an exact decimal's range (±7.9×10²⁸). */
+  /**
+   * Numbers with a fraction or an exponent, all within an exact decimal's range (±7.9×10²⁸, down to
+   * 1e-28). Only the range is checked: digits beyond a decimal's 28–29 are rounded.
+   */
   | { readonly kind: 'decimal' }
   /** Numbers with a fraction or an exponent, some beyond an exact decimal's range: floating point. */
   | { readonly kind: 'float' }
