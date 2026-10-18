@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JSON to TypeScript interfaces and types · json2types</title>
+    <meta
+      name="description"
+      content="Convert JSON to TypeScript interfaces or type aliases, with optional and nullable properties and read-only types, in your browser. Nothing you paste is uploaded."
+    />
+    <link rel="canonical" href="https://json2types.jonathas.net/typescript/" />
+    <meta name="author" content="Jonathas Costa" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#faf9f6" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f0f0e" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="json2types" />
+    <meta property="og:title" content="JSON to TypeScript interfaces and types · json2types" />
+    <meta
+      property="og:description"
+      content="Convert JSON to TypeScript interfaces or type aliases, with optional and nullable properties and read-only types, in your browser. Nothing you paste is uploaded."
+    />
+    <meta property="og:url" content="https://json2types.jonathas.net/typescript/" />
+    <meta property="og:image" content="https://json2types.jonathas.net/og/typescript.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <noscript><link rel="stylesheet" href="/noscript.css" /></noscript>
+  </head>
+  <body>
+    <!-- site-header -->
+    <main>
+      <div class="intro">
+        <h1>JSON to TypeScript</h1>
+        <p class="lede">Paste JSON, get TypeScript interfaces or types.</p>
+      </div>
+
+      <!-- tool:typescript -->
+
+      <article class="guide">
+        <h2>The options</h2>
+        <dl>
+          <dt>Interfaces or types</dt>
+          <dd>
+            Each object becomes <code>interface Order { … }</code> or <code>type Order = { … };</code>. They
+            type the JSON the same way; pick the one your code base uses.
+          </dd>
+          <dt>Export</dt>
+          <dd>
+            Exports every type. Without it the file still ends with <code>export {};</code>, so it stays a
+            module and its types can't merge with a global of the same name, such as the DOM's
+            <code>Screen</code>.
+          </dd>
+          <dt>Read-only</dt>
+          <dd>Marks every property and array <code>readonly</code>.</dd>
+          <dt>Root type name</dt>
+          <dd>The name of the outermost type, or of each item when the JSON is an array.</dd>
+        </dl>
+
+        <h2>How values become types</h2>
+        <h3>Optional and nullable</h3>
+        <p>
+          A property missing from some objects becomes optional (<code>email?: string</code>); one that is
+          <code>null</code> in some becomes <code>string | null</code>. One that is only ever
+          <code>null</code>, or whose values are of different kinds, becomes <code>unknown</code>.
+        </p>
+        <h3>Numbers, dates and GUIDs</h3>
+        <p>
+          Numbers are <code>number</code>, and dates and GUIDs <code>string</code>, which is what
+          <code>JSON.parse</code> gives you. Where some numbers are beyond ±2<sup>53</sup>, a comment warns
+          that <code>JSON.parse</code> may lose their digits.
+        </p>
+        <h3>Names</h3>
+        <p>
+          Properties keep their JSON names; names that aren't plain identifiers are quoted (<code
+            >"first-name": string</code
+          >). Type names are PascalCase, and the items of an array are named in the singular (<code
+            >orders</code
+          >
+          gives <code>Order</code>). Objects under the same key with the same properties share one type.
+        </p>
+        <h3>Requirements</h3>
+        <p>
+          The code needs TypeScript 3.4 or later. It is tested by type-checking the sample JSON against it
+          with the TypeScript compiler, in strict mode.
+        </p>
+      </article>
+    </main>
+    <!-- site-footer -->
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

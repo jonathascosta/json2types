@@ -97,8 +97,9 @@ export function startApp(): void {
   const notes = byId('notes', HTMLElement);
   const notesList = byId('notes-list', HTMLUListElement);
   const rememberNote = byId('remember-note', HTMLParagraphElement);
-  const csharpOptions = byId('csharp-options', HTMLFieldSetElement);
-  const typescriptOptions = byId('typescript-options', HTMLFieldSetElement);
+  // A language's own page has only that language's options.
+  const csharpOptions = document.getElementById('csharp-options');
+  const typescriptOptions = document.getElementById('typescript-options');
   const fields = form.elements;
 
   const storage = localStorageOrNull();
@@ -160,7 +161,8 @@ export function startApp(): void {
       const field = fields.namedItem(name);
       if (field instanceof HTMLInputElement) field.checked = on;
     };
-    set('language', s.language);
+    // On a language's own page the language is the page's, not the one remembered.
+    if (fields.namedItem('language') instanceof RadioNodeList) set('language', s.language);
     set('rootName', s.rootName);
     set('csharpKind', s.csharp.kind);
     set('csharpAttributes', s.csharp.attributes);
@@ -183,8 +185,8 @@ export function startApp(): void {
   function run(): void {
     clearTimeout(timer);
     const settings = read();
-    csharpOptions.hidden = settings.language !== 'csharp';
-    typescriptOptions.hidden = settings.language !== 'typescript';
+    if (csharpOptions) csharpOptions.hidden = settings.language !== 'csharp';
+    if (typescriptOptions) typescriptOptions.hidden = settings.language !== 'typescript';
     if (input.value.length > LARGE_INPUT) say('Converting…');
     converter.request({
       json: settings.input,
