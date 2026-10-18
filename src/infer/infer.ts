@@ -110,11 +110,18 @@ function temporalKind(value: string): 'date' | 'offset' | 'local' | null {
   const match = DATE_TIME.exec(value);
   if (!match || !isRealDate(match[1] ?? '', match[2] ?? '', match[3] ?? '')) return null;
   if (Number(match[4]) > 23 || Number(match[5]) > 59 || Number(match[6] ?? 0) > 59) return null;
+  if (match[7] === undefined) return 'local';
   if (match[8] !== undefined) {
     const offsetMinutes = Number(match[8]) * 60 + Number(match[9]);
     if (Number(match[9]) > 59 || offsetMinutes > 14 * 60) return null;
+    // DateTimeOffset also needs the moment itself, in UTC, within years 1 to 9999.
+    const sign = match[7].startsWith('-') ? -1 : 1;
+    const utc = new Date(0);
+    utc.setUTCFullYear(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    utc.setUTCHours(Number(match[4]), Number(match[5]) - sign * offsetMinutes, Number(match[6] ?? 0));
+    if (utc.getUTCFullYear() < 1 || utc.getUTCFullYear() > 9999) return null;
   }
-  return match[7] === undefined ? 'local' : 'offset';
+  return 'offset';
 }
 
 const INT32 = 2n ** 31n;
@@ -132,6 +139,7 @@ function beyondDecimal(raw: string): boolean {
   const point = whole.length + Number(match[3] ?? 0);
   const leadingZeros = /^0*/.exec(digits)?.[0].length ?? 0;
   // More than 29 integer digits can't fit; checking this first keeps 1e400000 cheap.
+  if (leadingZeros === digits.length) return false; // zero, whatever its exponent
   if (point - leadingZeros > 29) return true;
   if (point <= leadingZeros) return false;
   const integerPart = point >= digits.length ? digits.padEnd(point, '0') : digits.slice(0, point);
@@ -176,6 +184,9 @@ function addSample(shape: Shape, value: JsonValue, path: string, diagnostics: Di
     }
     case 'number': {
       const seen = numberShape(value.raw);
+      if (!Number.isFinite(Number(value.raw))) {
+        diagnostics.add(path, 'warning', 'A number here is too large even for floating point.');
+      }
       shape.numbers = shape.numbers
         ? {
             decimal: shape.numbers.decimal || seen.decimal,
@@ -202,7 +213,7 @@ function addSample(shape: Shape, value: JsonValue, path: string, diagnostics: Di
           diagnostics.add(
             propertyPath(path, key),
             'warning',
-            `The key "${key}" appears more than once in the same object; the last value is used.`,
+            `The key ${JSON.stringify(key)} appears more than once in the same object; the last value is used.`,
           );
         }
         fields.set(key, fieldValue);
@@ -220,8 +231,9 @@ function addSample(shape: Shape, value: JsonValue, path: string, diagnostics: Di
   }
 }
 
+/** RFC 9535 JSONPath: dot notation for simple names, brackets for the rest. */
 function propertyPath(path: string, key: string): string {
-  return /^[A-Za-z_$][\w$]*$/.test(key) ? `${path}.${key}` : `${path}[${JSON.stringify(key)}]`;
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ? `${path}.${key}` : `${path}[${JSON.stringify(key)}]`;
 }
 
 function stringType(strings: StringShape): TypeRef {
@@ -244,8 +256,10 @@ interface Pending {
 
 class Resolver {
   private readonly pending: Pending[] = [];
-  /** Placeholder id by structure, so identical objects share one type. */
+  /** Placeholder id by name hint and structure, so identical objects in alike places share one type. */
   private readonly byStructure = new Map<string, string>();
+  /** Placeholder ids of empty objects, which compare equal when their parents are compared. */
+  private readonly empty = new Set<string>();
 
   constructor(private readonly diagnostics: Diagnostics) {}
 
@@ -308,19 +322,30 @@ class Resolver {
       properties.push({ jsonName: key, ...type, optional: field.count < object.count });
     }
 
-    // Empty objects aren't shared: two unrelated {} would otherwise become one oddly named type.
-    // Property order doesn't matter for sharing; the first type found keeps its own order.
+    // Only objects with the same name hint are shared (billing.address and shipping.address), so a
+    // user and a product that both happen to be {"id": …} keep their own types. Property order
+    // doesn't matter; the first type found keeps its own. Empty objects aren't shared at all.
+    const sorted = [...properties].sort((a, b) => compare(a.jsonName, b.jsonName));
     const structure =
-      properties.length === 0
-        ? null
-        : JSON.stringify([...properties].sort((a, b) => compare(a.jsonName, b.jsonName)));
+      properties.length === 0 ? null : JSON.stringify([nameHint, sorted.map((p) => this.structureOf(p))]);
     const existing = structure === null ? undefined : this.byStructure.get(structure);
     if (existing) return { kind: 'object', name: existing };
 
     const id = `#${String(this.pending.length)}`;
     this.pending.push({ hint: nameHint, properties });
-    if (structure !== null) this.byStructure.set(structure, id);
+    if (structure === null) this.empty.add(id);
+    else this.byStructure.set(structure, id);
     return { kind: 'object', name: id };
+  }
+
+  /** A property for comparing structures, with every empty object written the same way. */
+  private structureOf(property: Property): unknown {
+    const erase = (type: TypeRef): unknown => {
+      if (type.kind === 'array') return { ...type, items: { ...type.items, type: erase(type.items.type) } };
+      if (type.kind === 'object' && this.empty.has(type.name)) return { kind: 'object', name: '{}' };
+      return type;
+    };
+    return { ...property, type: erase(property.type) };
   }
 
   /** Names the collected types from the root down; returns the root and the declarations. */
@@ -347,10 +372,13 @@ class Resolver {
       }
     };
     enqueue(root, rootName);
-    for (let next = queue.shift(); next; next = queue.shift()) {
+    for (let i = 0; i < queue.length; i++) {
+      const next = queue[i];
+      if (!next) break;
+      const pending = this.pendingFor(next.id);
       names.set(next.id, claim(next.hint));
       order.push(next.id);
-      for (const property of this.pendingFor(next.id).properties) enqueue(property.type);
+      for (const property of pending.properties) enqueue(property.type);
     }
 
     const rename = (type: TypeRef): TypeRef => {

@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { JsonParseError, MAX_DEPTH, parseJson } from './parse';
+import { JsonParseError, MAX_DEPTH, parseJson, type JsonValue } from './parse';
+
+/** The parsed value as plain JavaScript, to compare with JSON.parse. */
+function toPlain(value: JsonValue): unknown {
+  switch (value.type) {
+    case 'object':
+      return Object.fromEntries(value.entries.map((e) => [e.key, toPlain(e.value)]));
+    case 'array':
+      return value.items.map(toPlain);
+    case 'number':
+      return Number(value.raw);
+    case 'null':
+      return null;
+    default:
+      return value.value;
+  }
+}
 
 function errorOf(text: string): JsonParseError {
   try {
@@ -40,11 +56,26 @@ describe('parseJson', () => {
     expect(parseJson('-1.5e-3')).toEqual({ type: 'number', raw: '-1.5e-3' });
   });
 
-  it('decodes escapes, including surrogate pairs', () => {
-    expect(parseJson(String.raw`"a\"b\\c\/d\n\té😀"`)).toEqual({
-      type: 'string',
-      value: 'a"b\\c/d\n\té😀',
-    });
+  it('decodes escapes, including surrogate pairs written as escapes', () => {
+    const text = String.raw`"a\"b\\c\/d\n\t\u00e9\ud83d\ude00"`;
+    expect(parseJson(text)).toEqual({ type: 'string', value: 'a"b\\c/d\n\t\u00e9\u{1F600}' });
+    expect(parseJson(text)).toEqual({ type: 'string', value: JSON.parse(text) as string });
+  });
+
+  it('decodes every escape and accepts what JSON.parse accepts', () => {
+    const texts = [String.raw`"\b\f\r\u00C9\uD83D\uDE00"`, '-0', '1E+2', '1e-2', '0.5', '[-0.0]', '{"":""}'];
+    for (const text of texts) {
+      expect(JSON.stringify(toPlain(parseJson(text)))).toBe(JSON.stringify(JSON.parse(text)));
+    }
+  });
+
+  it('keeps a lone surrogate escape, as JSON.parse does', () => {
+    expect(parseJson(String.raw`"\ud800x"`)).toEqual({ type: 'string', value: '\ud800x' });
+  });
+
+  it('rejects whitespace JSON does not allow', () => {
+    expect(errorOf('[1,\f2]').message).toBe('Unexpected U+000C (line 1, column 4)');
+    expect(errorOf('[1,\v2]').message).toBe('Unexpected U+000B (line 1, column 4)');
   });
 
   it('accepts a byte order mark and surrounding whitespace', () => {

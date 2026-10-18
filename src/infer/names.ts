@@ -11,7 +11,10 @@ const RESERVED = new Set([
   'Action',
   'Array',
   'Attribute',
+  'BigInt',
+  'Blob',
   'Boolean',
+  'Buffer',
   'Byte',
   'Char',
   'Console',
@@ -23,34 +26,49 @@ const RESERVED = new Set([
   'Double',
   'Element',
   'Enum',
+  'Environment',
   'Error',
   'Event',
   'Exception',
+  'File',
   'Func',
   'Function',
   'Guid',
+  'Headers',
+  'Index',
   'Int16',
   'Int32',
   'Int64',
   'Json',
   'List',
+  'Location',
   'Map',
   'Math',
   'Node',
   'Nullable',
   'Number',
   'Object',
+  'Partial',
   'Promise',
+  'Random',
+  'Range',
+  'Readonly',
   'Record',
-  'Response',
+  'RegExp',
   'Request',
+  'Required',
+  'Response',
   'Set',
   'Single',
   'String',
   'Symbol',
+  'System',
   'Task',
+  'TimeSpan',
   'Type',
+  'URL',
   'Uri',
+  'Version',
   'Void',
   'Window',
 ]);
@@ -67,6 +85,13 @@ export function avoidReserved(name: string): string {
 const identifierPart = (char: string): boolean =>
   /[\p{L}\p{Mn}\p{Mc}\p{Nd}\p{Nl}]/u.test(char) && /\p{ID_Continue}/u.test(char);
 
+/** Capitalises a word's first letter, unless that would change its length (ß → SS). */
+function capitalise(word: string): string {
+  const first = String.fromCodePoint(word.codePointAt(0) ?? 0);
+  const upper = first.toUpperCase();
+  return (upper.length === first.length ? upper : first) + word.slice(first.length);
+}
+
 /**
  * Turns any JSON key into PascalCase words: "home address" → HomeAddress, "HOME_ADDRESS" →
  * HomeAddress, "2fa" → Item2fa. Words are runs of identifier characters (see identifierPart);
@@ -77,12 +102,14 @@ export function pascalCase(key: string): string {
   const words = separated
     .replace(/([\p{Ll}\p{Nd}])(\p{Lu})/gu, '$1 $2')
     .split(' ')
-    .filter((word) => /^[\p{L}\p{Nd}\p{Nl}]/u.test(word))
+    // A word can't start with a combining mark; drop the marks, keep the rest.
+    .map((word) => word.replace(/^[\p{Mn}\p{Mc}]+/u, ''))
+    .filter((word) => word !== '')
     // Words in capitals longer than an acronym read as ordinary words: HOME → Home, but ID stays.
     .map((word) =>
       word.length > 2 && word === word.toUpperCase() && /\p{Lu}/u.test(word) ? word.toLowerCase() : word,
     );
-  const name = words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join('');
+  const name = words.map(capitalise).join('');
   if (name === '') return 'Item';
   return /^\p{Nd}/u.test(name) ? `Item${name}` : name;
 }
@@ -92,41 +119,67 @@ export function typeName(key: string): string {
   return avoidReserved(pascalCase(key));
 }
 
-const IRREGULAR: Readonly<Record<string, string>> = {
-  people: 'person',
-  children: 'child',
-  men: 'man',
-  women: 'woman',
-  mice: 'mouse',
-  geese: 'goose',
-  feet: 'foot',
-  teeth: 'tooth',
-  indices: 'index',
-  matrices: 'matrix',
-  vertices: 'vertex',
-  criteria: 'criterion',
-  analyses: 'analysis',
-  movies: 'movie',
-  cookies: 'cookie',
-  zombies: 'zombie',
-  ties: 'tie',
-  pies: 'pie',
-  gases: 'gas',
-  quizzes: 'quiz',
-  buses: 'bus',
-  statuses: 'status',
-  viruses: 'virus',
-  campuses: 'campus',
-  bonuses: 'bonus',
-  censuses: 'census',
-  beaches: 'beach',
-  coaches: 'coach',
-  peaches: 'peach',
-  approaches: 'approach',
-  heroes: 'hero',
-  potatoes: 'potato',
-  tomatoes: 'tomato',
-};
+// Maps rather than object literals, so keys such as "constructor" or "__proto__" are just words.
+const IRREGULAR = new Map(
+  Object.entries({
+    people: 'person',
+    children: 'child',
+    men: 'man',
+    women: 'woman',
+    mice: 'mouse',
+    geese: 'goose',
+    feet: 'foot',
+    teeth: 'tooth',
+    indices: 'index',
+    matrices: 'matrix',
+    vertices: 'vertex',
+    criteria: 'criterion',
+    analyses: 'analysis',
+    diagnoses: 'diagnosis',
+    theses: 'thesis',
+    crises: 'crisis',
+    movies: 'movie',
+    cookies: 'cookie',
+    zombies: 'zombie',
+    calories: 'calorie',
+    ties: 'tie',
+    pies: 'pie',
+    lies: 'lie',
+    gases: 'gas',
+    quizzes: 'quiz',
+    buses: 'bus',
+    statuses: 'status',
+    viruses: 'virus',
+    campuses: 'campus',
+    bonuses: 'bonus',
+    censuses: 'census',
+    aliases: 'alias',
+    canvases: 'canvas',
+    lenses: 'lens',
+    heroes: 'hero',
+    potatoes: 'potato',
+    tomatoes: 'tomato',
+    echoes: 'echo',
+    leaves: 'leaf',
+    lives: 'life',
+    wives: 'wife',
+    knives: 'knife',
+    halves: 'half',
+    shelves: 'shelf',
+    wolves: 'wolf',
+    thieves: 'thief',
+    // -che words, whose plural only adds an s.
+    caches: 'cache',
+    niches: 'niche',
+    headaches: 'headache',
+    avalanches: 'avalanche',
+    moustaches: 'moustache',
+    mustaches: 'mustache',
+    cliches: 'cliche',
+    quiches: 'quiche',
+    psyches: 'psyche',
+  }),
+);
 
 /** Words that are the same in the plural, or have no singular worth using. */
 const UNCOUNTABLE = new Set([
@@ -150,9 +203,13 @@ const UNCOUNTABLE = new Set([
  * the result is the name followed by Item. Pass the result through avoidReserved: Errors → Error.
  */
 export function singular(name: string): string {
-  // Items2 → Item2: singular of the words, then the number back.
+  // Items2 → Item2: the singular of the words, then the number back; Level2 → Level2Item.
   const numbered = /^(.*\D)(\d+)$/.exec(name);
-  if (numbered) return singular(numbered[1] ?? '') + (numbered[2] ?? '');
+  if (numbered) {
+    const words = numbered[1] ?? '';
+    const base = singular(words);
+    return base === `${words}Item` ? `${name}Item` : base + (numbered[2] ?? '');
+  }
   if (name.endsWith('Item')) return name;
 
   const split = /^(.*?)(\p{Lu}[^\p{Lu}]*)$/u.exec(name);
@@ -161,16 +218,17 @@ export function singular(name: string): string {
   const lower = last.toLowerCase();
   const restore = (word: string): string => head + last.charAt(0) + word.slice(1);
 
-  const irregular = IRREGULAR[lower];
-  if (irregular) return restore(irregular);
+  const irregular = IRREGULAR.get(lower);
+  if (irregular !== undefined) return restore(irregular);
   if (UNCOUNTABLE.has(lower)) return `${name}Item`;
   // An acronym in the plural: URLs → URL, UserIDs → UserID.
   if (/\p{Lu}{2,}s$/u.test(name)) return name.slice(0, -1);
   if (lower.length < 3) return `${name}Item`;
   if (/[^aeiou]ies$/.test(lower)) return restore(`${lower.slice(0, -3)}y`);
-  // Boxes, Addresses, Wishes, Buzzes, and -ches after t, n or r (Matches, Branches, Churches).
-  // Other -ches and -uses lose only the s: Caches, Niches, Houses, Causes.
-  if (/(?:ss|x|sh|zz|[tnr]ch)es$/.test(lower)) return restore(lower.slice(0, -2));
-  if (/[^isu]s$/.test(lower)) return restore(lower.slice(0, -1));
+  // Boxes, Addresses, Wishes, Buzzes, Matches, Speeches; the -che words are in IRREGULAR.
+  if (/(?:ss|x|sh|zz|ch)es$/.test(lower)) return restore(lower.slice(0, -2));
+  // Not plurals: Analysis, Status, Canvas, Lens, Class.
+  if (/(?:is|us|as|ns|ss)$/.test(lower)) return `${name}Item`;
+  if (lower.endsWith('s')) return restore(lower.slice(0, -1));
   return `${name}Item`;
 }

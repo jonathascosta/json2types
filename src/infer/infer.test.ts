@@ -222,13 +222,25 @@ describe('inferModel', () => {
     expect(names(model)).toEqual(['Root', 'ErrorItem', 'ResponseItem', 'DateItem', 'EventItem', 'TypeItem']);
   });
 
-  it('shares one type between identical shapes, whatever their property order', () => {
+  it('shares one type between identical shapes in alike places, whatever their property order', () => {
     const model = infer(
       '{"billing":{"address":{"street":"a","city":"b"}},"shipping":{"address":{"city":"d","street":"c"}},"office":{"address":{"line":"e"}}}',
     );
-    expect(names(model)).toEqual(['Root', 'Billing', 'Office', 'Address', 'Address2']);
-    expect(property(model, 'Root', 'shipping')?.type).toEqual({ kind: 'object', name: 'Billing' });
+    expect(names(model)).toEqual(['Root', 'Billing', 'Shipping', 'Office', 'Address', 'Address2']);
+    expect(property(model, 'Shipping', 'address')?.type).toEqual({ kind: 'object', name: 'Address' });
     expect(declaration(model, 'Address')?.properties.map((p) => p.jsonName)).toEqual(['street', 'city']);
+  });
+
+  it('keeps alike shapes in unrelated places apart', () => {
+    expect(names(infer('{"user":{"id":1},"product":{"id":2}}'))).toEqual(['Root', 'User', 'Product']);
+  });
+
+  it('shares parents that differ only by empty objects, but not the empty objects themselves', () => {
+    const model = infer('[{"a":{"x":{}}},{"a":{"x":{}}}]');
+    expect(names(model)).toEqual(['Root', 'A', 'X']);
+    expect(names(infer('{"items":[{"x":{}},{"x":{}}]}'))).toEqual(['Root', 'Item', 'X']);
+    // q.p is alike root.p (same name, same shape, one empty child), so the two share P.
+    expect(names(infer('{"p":{"x":{}},"q":{"p":{"x":{}}}}'))).toEqual(['Root', 'P', 'Q', 'X']);
   });
 
   it('does not share empty objects between unrelated properties', () => {
@@ -237,6 +249,47 @@ describe('inferModel', () => {
 
   it('names item types without doubling Item', () => {
     expect(names(infer('{"list":[{"a":1}],"items2":[{"b":1}]}'))).toEqual(['Root', 'ListItem', 'Item2']);
+  });
+
+  it('handles keys that are names of Object.prototype members', () => {
+    const model = infer(
+      '{"constructor":[{"a":1}],"toString":[{"b":1}],"__proto__":[{"c":1}],"myConstructor":[{"d":1}]}',
+    );
+    expect(names(model)).toEqual([
+      'Root',
+      'ConstructorItem',
+      'ToStringItem',
+      'ProtoItem',
+      'MyConstructorItem',
+    ]);
+  });
+
+  it('treats a zero as zero, whatever its exponent', () => {
+    expect(infer('[1.5, 0e400, 0.000e50, -0.0]').root.type).toEqual({
+      kind: 'array',
+      items: plain({ kind: 'decimal' }),
+    });
+  });
+
+  it('warns about numbers too large even for floating point', () => {
+    const model = infer('{"x":[1e400, 1.5]}');
+    expect(property(model, 'Root', 'x')?.type).toEqual({ kind: 'array', items: plain({ kind: 'float' }) });
+    expect(model.diagnostics).toEqual([
+      {
+        path: '$.x[*]',
+        severity: 'warning',
+        message: 'A number here is too large even for floating point.',
+        count: 1,
+      },
+    ]);
+  });
+
+  it('refuses date-times whose offset moves them outside the years 1 to 9999', () => {
+    const at = (value: string) => infer(JSON.stringify(value)).root.type.kind;
+    expect(at('9999-12-31T23:59:59-01:00')).toBe('string');
+    expect(at('0001-01-01T00:00:00+01:00')).toBe('string');
+    expect(at('9999-12-31T22:59:59-01:00')).toBe('dateTime');
+    expect(at('0001-01-01T01:00:00+01:00')).toBe('dateTime');
   });
 
   it('copes with odd property names', () => {
@@ -282,6 +335,7 @@ describe('inferModel', () => {
   it('writes paths with brackets for keys that are not identifiers', () => {
     const model = infer('{"odd key":[null]}');
     expect(model.diagnostics[0]?.path).toBe('$["odd key"][*]');
+    expect(infer('{"$ref":[null]}').diagnostics[0]?.path).toBe('$["$ref"][*]');
   });
 
   it('infers a large sample in reasonable time', () => {
