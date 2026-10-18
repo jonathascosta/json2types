@@ -25,4 +25,5 @@ npm run build    # type-check and build to dist/
 Every pull request is linted, tested and built by GitHub Actions; every push to `main` is also
 deployed to GitHub Pages. One-time setup, in the repository's **Settings → Pages**: set the source to
 **GitHub Actions**, the custom domain to `json2types.jonathas.net`, and turn on **Enforce HTTPS**.
-The DNS record is a CNAME from `json2types` to `jonathascosta.github.io`.
+The DNS record is a CNAME from `json2types` to `jonathascosta.github.io`. With Actions deployments
+the domain in Settings is the one that counts; `public/CNAME` only records it in the repository.

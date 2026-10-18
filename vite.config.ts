@@ -33,6 +33,10 @@ function securityPolicy(): Plugin {
 
 export default defineConfig({
   plugins: [securityPolicy()],
+  build: {
+    // Keep every asset a file of its own: the policy above has no data: sources.
+    assetsInlineLimit: 0,
+  },
   define: {
     __APP_VERSION__: JSON.stringify(version),
   },
