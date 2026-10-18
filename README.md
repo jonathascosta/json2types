@@ -29,7 +29,7 @@ and [milestones](https://github.com/jonathascosta/json2types/milestones): one mi
 
 ## Development
 
-Requires Node.js 22 (22.13 or later), 24, or 26 and later. CI tests on Node 22, 24 and 26, and deploys from 24 (`.nvmrc`).
+Requires Node.js 22 (22.19 or later, for Lighthouse), 24, or 26 and later. CI tests on Node 22, 24 and 26, and deploys from 24 (`.nvmrc`).
 
 ```sh
 npm ci           # install
@@ -40,16 +40,34 @@ npm run lint     # ESLint and Prettier
 npm run build    # type-check and build to dist/
 npm run preview  # serve dist/, with the security policy (no trailing-slash redirect, unlike Pages)
 npm run check:dist  # check the built page keeps its security policy
+npm run test:e2e    # end-to-end and accessibility tests in Chromium, against the build
+npm run lighthouse  # Lighthouse on every page, phone and desktop: 95 or more in each category
 ```
 
 Adding a page means adding it to `build.rolldownOptions.input` in `vite.config.ts`, to `PAGES` in
-`scripts/check-dist.mjs` and to `public/sitemap.xml`, with a social image from
+`scripts/check-dist.mjs`, `scripts/lighthouse.mjs`, `e2e/accessibility.spec.ts` and
+`e2e/pages.spec.ts`, and to `public/sitemap.xml`, with a social image from
 `design/render-images.mjs`.
+
+### End-to-end tests and Lighthouse
+
+Both run against the build (`npm run build` first), served by `vite preview`, since the security
+policy is only in the build. They need Chromium: `npx playwright install chromium` once, or set
+`CHROMIUM_PATH` to a Chromium already on the machine.
+
+### Dependencies
+
+New versions wait a week before they're taken, as a buffer against a compromised release:
+Dependabot has a 7-day cooldown, and a new package is added with
+`npm install --before="$(date -u -d '-7 days' +%FT%TZ)" …` so its own dependencies are a week old
+too. `@playwright/test` is pinned exactly, and an npm override makes `@axe-core/playwright` use the
+same `playwright-core`, so the tests drive one Playwright.
 
 ## Deployment
 
-Every pull request is linted, tested and built by GitHub Actions; every push to `main` is also
-deployed to GitHub Pages. One-time setup, in the repository's **Settings → Pages**: set the source to
+Every pull request is linted, tested and built by GitHub Actions, and the build is checked in
+Chromium (end-to-end tests, axe and Lighthouse); every push to `main` that passes is also deployed
+to GitHub Pages. One-time setup, in the repository's **Settings → Pages**: set the source to
 **GitHub Actions**, the custom domain to `json2types.jonathas.net`, and turn on **Enforce HTTPS**.
 The DNS record is a CNAME from `json2types` to `jonathascosta.github.io`. With Actions deployments
 the domain in Settings is the one that counts; `public/CNAME` only records it in the repository.

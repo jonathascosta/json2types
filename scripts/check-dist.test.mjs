@@ -122,10 +122,38 @@ describe('findMissingPages', () => {
     file('typescript/index.html', canonical('/typescript/')),
     file('404.html', '<meta name="robots" content="noindex" />', '<p>Not found</p>'),
     sitemap,
+    {
+      name: 'robots.txt',
+      text: 'User-agent: *\nAllow: /\n\nSitemap: https://json2types.jonathas.net/sitemap.xml\n',
+    },
   ];
 
   it('accepts the complete site', () => {
     expect(findMissingPages(complete())).toEqual([]);
+  });
+
+  it('flags a robots.txt crawlers would misread, or one without the sitemap', () => {
+    const site = complete();
+    site[5] = { name: 'robots.txt', text: 'User-agent *\nDisallow:' };
+    expect(findMissingPages(site)).toEqual([
+      'robots.txt: has a line crawlers would not understand',
+      "robots.txt: doesn't point to the sitemap",
+    ]);
+    site[5] = {
+      name: 'robots.txt',
+      text: 'User-agent: *\nDisallow: /\nSitemap: https://json2types.jonathas.net/sitemap.xml',
+    };
+    expect(findMissingPages(site)).toEqual(['robots.txt: closes the site to crawlers']);
+  });
+
+  it('reads robots.txt as crawlers do: any case, CRLF, comments, empty Disallow, other fields', () => {
+    const site = complete();
+    site[5] = {
+      name: 'robots.txt',
+      text: '# crawl it all\r\nuser-agent: *\r\nDisallow:\r\nCrawl-delay: 1\r\nUser-agent: BadBot\r\nDisallow: /\r\nSITEMAP: https://json2types.jonathas.net/sitemap.xml\r\n',
+    };
+    expect(findMissingPages(site)).toEqual([]);
+    expect(findMissingPages(complete().slice(0, 5))).toEqual(['dist/ has no robots.txt']);
   });
 
   it('flags a page the build dropped, or one without its converter, header or footer', () => {
