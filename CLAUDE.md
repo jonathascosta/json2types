@@ -34,6 +34,9 @@ of the owner's.
    only if the owner has said that pull requests go in automatically; otherwise wait for the
    owner's approval on each pull request.
 
+   In this project, pull requests go in automatically (the owner's call, 18 October 2026): merge
+   each one as soon as its CI passes.
+
 Priorities: **P0** breaks the product, loses data or is a security problem; **P1** is a real bug
 or a clear gap in what the task asked for; **P2** is a minor issue that is worth fixing now;
 **P3** is an improvement that can wait; **P4** is an idea or a nit with little value today. The scale
