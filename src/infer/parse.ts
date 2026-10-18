@@ -108,6 +108,7 @@ export function parseJson(text: string): JsonValue {
         continue;
       }
       result += text.slice(chunkStart, pos);
+      if (pos + 1 >= text.length) fail('Unterminated string', start);
       const escape = text[pos + 1] ?? '';
       if (escape === 'u') {
         const hex = text.slice(pos + 2, pos + 6);

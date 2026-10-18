@@ -77,6 +77,15 @@ describe('parseJson', () => {
     ['1.', "Unexpected '.' after the JSON value", 1, 2],
     ['{} x', "Unexpected 'x' after the JSON value", 1, 4],
     ['NaN', "Unexpected 'N'", 1, 1],
+    ['-', "Unexpected '-'", 1, 1],
+    ['-01', "Unexpected '1' after the JSON value", 1, 3],
+    ['+1', "Unexpected '+'", 1, 1],
+    ['.5', "Unexpected '.'", 1, 1],
+    ['1e', "Unexpected 'e' after the JSON value", 1, 2],
+    ['1e+', "Unexpected 'e' after the JSON value", 1, 2],
+    ['nul', "Unexpected 'n'", 1, 1],
+    ['truex', "Unexpected 'x' after the JSON value", 1, 5],
+    ['"ab\\', 'Unterminated string', 1, 1],
   ])('reports %j with its position', (text, message, line, column) => {
     const error = errorOf(text);
     expect(error.message).toBe(`${message} (line ${String(line)}, column ${String(column)})`);
@@ -84,9 +93,12 @@ describe('parseJson', () => {
   });
 
   it('allows exactly MAX_DEPTH levels of nesting, and no more', () => {
-    const nested = (levels: number) => '['.repeat(levels) + '1' + ']'.repeat(levels);
-    expect(() => parseJson(nested(MAX_DEPTH))).not.toThrow();
-    expect(errorOf(nested(MAX_DEPTH + 1)).message).toMatch(/^Nested more than 500 levels deep/);
+    const arrays = (levels: number) => '['.repeat(levels) + '1' + ']'.repeat(levels);
+    const objects = (levels: number) => '{"a":'.repeat(levels) + '1' + '}'.repeat(levels);
+    expect(() => parseJson(arrays(MAX_DEPTH))).not.toThrow();
+    expect(() => parseJson(objects(MAX_DEPTH))).not.toThrow();
+    expect(errorOf(arrays(MAX_DEPTH + 1)).message).toMatch(/^Nested more than 500 levels deep/);
+    expect(errorOf(objects(MAX_DEPTH + 1)).message).toMatch(/^Nested more than 500 levels deep/);
   });
 
   it('counts lines ended by \\n, \\r\\n or a lone \\r', () => {

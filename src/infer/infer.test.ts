@@ -114,14 +114,36 @@ describe('inferModel', () => {
     ['an offset without a colon', '2026-10-18T12:00:00+0100'],
     ['an out-of-range offset', '2026-10-18T12:00:00+99:99'],
     ['an hour of 24', '2026-10-18T24:00:00Z'],
-    ['more than seven fraction digits', '2026-10-18T12:00:00.12345678Z'],
+    ['more than sixteen fraction digits', '2026-10-18T12:00:00.12345678901234567Z'],
+    ['an offset beyond 14 hours', '2026-10-18T12:00:00+14:01'],
+    ['year 0, before .NET dates begin', '0000-01-01T00:00:00Z'],
   ])('reads a date-time with %s as a plain string, as System.Text.Json would', (_, value) => {
     expect(infer(JSON.stringify(value)).root.type).toEqual({ kind: 'string' });
   });
 
-  it('checks dates in years below 100 properly', () => {
+  it('checks dates in years below 100 properly, and refuses year 0', () => {
     expect(infer('"0004-02-29"').root.type).toEqual({ kind: 'date' });
     expect(infer('"0001-02-29"').root.type).toEqual({ kind: 'string' });
+    expect(infer('"0000-01-01"').root.type).toEqual({ kind: 'string' });
+  });
+
+  it('accepts the forms System.Text.Json reads: up to 16 fraction digits, offsets up to ±14:00', () => {
+    const at = (value: string) => infer(JSON.stringify(value)).root.type;
+    expect(at('2026-10-18T12:00:00.123456789Z')).toEqual({ kind: 'dateTime', offset: 'always' });
+    expect(at('2026-10-18T12:00:00.1234567890123456Z')).toEqual({ kind: 'dateTime', offset: 'always' });
+    expect(at('2026-10-18T12:00:00+14:00')).toEqual({ kind: 'dateTime', offset: 'always' });
+    expect(at('2026-10-18T12:00:00-14:00')).toEqual({ kind: 'dateTime', offset: 'always' });
+  });
+
+  it('uses floating point when a fractional number is beyond an exact decimal', () => {
+    const items = (json: string) => (infer(json).root.type as { items: { type: unknown } }).items.type;
+    expect(items('[1.5, 79228162514264337593543950335.0]')).toEqual({ kind: 'decimal' });
+    expect(items('[1.5, 7.9e28, -7.9e28, 1e-400]')).toEqual({ kind: 'decimal' });
+    expect(items('[1.5, 79228162514264337593543950336.0]')).toEqual({ kind: 'float' });
+    expect(items('[1.5, 8e28]')).toEqual({ kind: 'float' });
+    expect(items('[1.5, -1e400]')).toEqual({ kind: 'float' });
+    expect(items('[1.5, 1e99999999]')).toEqual({ kind: 'float' });
+    expect(items('[1.5, 0.000079228162514264337593543950336e33]')).toEqual({ kind: 'float' });
   });
 
   it('reports values of different kinds instead of guessing', () => {
@@ -211,6 +233,10 @@ describe('inferModel', () => {
 
   it('does not share empty objects between unrelated properties', () => {
     expect(names(infer('{"meta":{},"extra":{}}'))).toEqual(['Root', 'Meta', 'Extra']);
+  });
+
+  it('names item types without doubling Item', () => {
+    expect(names(infer('{"list":[{"a":1}],"items2":[{"b":1}]}'))).toEqual(['Root', 'ListItem', 'Item2']);
   });
 
   it('copes with odd property names', () => {

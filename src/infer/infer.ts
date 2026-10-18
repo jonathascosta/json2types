@@ -1,5 +1,5 @@
 import type { Diagnostic, Model, ObjectDeclaration, Property, PropertyType, TypeRef } from './model';
-import { avoidReserved, singular, typeName } from './names';
+import { avoidReserved, pascalCase, singular, typeName } from './names';
 import type { JsonValue } from './parse';
 
 export interface InferOptions {
@@ -67,6 +67,8 @@ interface StringShape {
 
 interface NumberShape {
   decimal: boolean;
+  /** Some value is beyond what an exact decimal holds (±79228162514264337593543950335). */
+  beyondDecimal: boolean;
   bits: 32 | 64 | 'big';
 }
 
@@ -86,12 +88,15 @@ function newShape(): Shape {
 }
 
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
-// Strict ISO 8601, as System.Text.Json reads it: a T between date and time, and a Z or ±hh:mm offset.
+// ISO 8601 as System.Text.Json reads it: a T between date and time, up to 16 fraction digits, and a
+// Z or ±hh:mm offset of at most 14 hours.
 const DATE_TIME =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,7})?)?(Z|[+-](\d{2}):(\d{2}))?$/;
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,16})?)?(Z|[+-](\d{2}):(\d{2}))?$/;
 const GUID = /^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$/;
 
 function isRealDate(year: string, month: string, day: string): boolean {
+  // .NET's dates start at year 1.
+  if (Number(year) < 1) return false;
   // setUTCFullYear, unlike Date.UTC, doesn't read years 0 to 99 as 1900 to 1999.
   const date = new Date(0);
   date.setUTCFullYear(Number(year), Number(month) - 1, Number(day));
@@ -105,19 +110,40 @@ function temporalKind(value: string): 'date' | 'offset' | 'local' | null {
   const match = DATE_TIME.exec(value);
   if (!match || !isRealDate(match[1] ?? '', match[2] ?? '', match[3] ?? '')) return null;
   if (Number(match[4]) > 23 || Number(match[5]) > 59 || Number(match[6] ?? 0) > 59) return null;
-  if (match[8] !== undefined && (Number(match[8]) > 23 || Number(match[9]) > 59)) return null;
+  if (match[8] !== undefined) {
+    const offsetMinutes = Number(match[8]) * 60 + Number(match[9]);
+    if (Number(match[9]) > 59 || offsetMinutes > 14 * 60) return null;
+  }
   return match[7] === undefined ? 'local' : 'offset';
 }
 
 const INT32 = 2n ** 31n;
 const INT64 = 2n ** 63n;
+/** The largest magnitude System.Text.Json reads into a C# decimal. */
+const DECIMAL_MAX = 79228162514264337593543950335n;
+
+/** Whether a JSON number's magnitude exceeds DECIMAL_MAX, worked out exactly from its text. */
+function beyondDecimal(raw: string): boolean {
+  const match = /^-?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(raw);
+  if (!match) return false;
+  const whole = match[1] ?? '';
+  const digits = whole + (match[2] ?? '');
+  // Where the decimal point falls in `digits`, once the exponent is applied.
+  const point = whole.length + Number(match[3] ?? 0);
+  const leadingZeros = /^0*/.exec(digits)?.[0].length ?? 0;
+  // More than 29 integer digits can't fit; checking this first keeps 1e400000 cheap.
+  if (point - leadingZeros > 29) return true;
+  if (point <= leadingZeros) return false;
+  const integerPart = point >= digits.length ? digits.padEnd(point, '0') : digits.slice(0, point);
+  return BigInt(integerPart) > DECIMAL_MAX;
+}
 
 function numberShape(raw: string): NumberShape {
-  if (/[.eE]/.test(raw)) return { decimal: true, bits: 32 };
+  if (/[.eE]/.test(raw)) return { decimal: true, beyondDecimal: beyondDecimal(raw), bits: 32 };
   const value = BigInt(raw);
-  if (value >= -INT32 && value < INT32) return { decimal: false, bits: 32 };
-  if (value >= -INT64 && value < INT64) return { decimal: false, bits: 64 };
-  return { decimal: false, bits: 'big' };
+  if (value >= -INT32 && value < INT32) return { decimal: false, beyondDecimal: false, bits: 32 };
+  if (value >= -INT64 && value < INT64) return { decimal: false, beyondDecimal: false, bits: 64 };
+  return { decimal: false, beyondDecimal: value > DECIMAL_MAX || value < -DECIMAL_MAX, bits: 'big' };
 }
 
 const widerBits = (a: NumberShape['bits'], b: NumberShape['bits']): NumberShape['bits'] =>
@@ -151,7 +177,11 @@ function addSample(shape: Shape, value: JsonValue, path: string, diagnostics: Di
     case 'number': {
       const seen = numberShape(value.raw);
       shape.numbers = shape.numbers
-        ? { decimal: shape.numbers.decimal || seen.decimal, bits: widerBits(shape.numbers.bits, seen.bits) }
+        ? {
+            decimal: shape.numbers.decimal || seen.decimal,
+            beyondDecimal: shape.numbers.beyondDecimal || seen.beyondDecimal,
+            bits: widerBits(shape.numbers.bits, seen.bits),
+          }
         : seen;
       return;
     }
@@ -249,8 +279,9 @@ class Resolver {
 
     if (shape.strings) return { type: stringType(shape.strings), nullable };
     if (shape.numbers) {
-      const { decimal, bits } = shape.numbers;
-      return { type: decimal ? { kind: 'decimal' } : { kind: 'integer', bits }, nullable };
+      const { decimal, beyondDecimal, bits } = shape.numbers;
+      if (!decimal) return { type: { kind: 'integer', bits }, nullable };
+      return { type: { kind: beyondDecimal ? 'float' : 'decimal' }, nullable };
     }
     if (shape.object) return { type: this.collect(shape.object, path, nameHint), nullable };
     if (shape.array) {
@@ -267,8 +298,13 @@ class Resolver {
   private collect(object: ObjectShape, path: string, nameHint: string): TypeRef {
     const properties: Property[] = [];
     for (const [key, field] of object.fields) {
-      const hint = typeName(key);
-      const type = this.resolve(field, propertyPath(path, key), hint, avoidReserved(singular(hint)));
+      const name = pascalCase(key);
+      const type = this.resolve(
+        field,
+        propertyPath(path, key),
+        avoidReserved(name),
+        avoidReserved(singular(name)),
+      );
       properties.push({ jsonName: key, ...type, optional: field.count < object.count });
     }
 

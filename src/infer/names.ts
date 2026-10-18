@@ -61,20 +61,35 @@ export function avoidReserved(name: string): string {
 }
 
 /**
- * Turns any JSON key into a PascalCase type name: "home address" → HomeAddress, "2fa" → Item2fa.
- * Words are letters (with their accents), decimal digits and letter-like numbers; everything else
- * separates them, so the result is a valid identifier in C# and TypeScript.
+ * Whether a character can be part of an identifier in both C# and TypeScript: a letter, a combining
+ * mark (Mn, Mc), a decimal digit or a letter-like number, that ECMAScript also allows (ID_Continue).
  */
-export function typeName(key: string): string {
-  const words = key
-    .normalize('NFC')
+const identifierPart = (char: string): boolean =>
+  /[\p{L}\p{Mn}\p{Mc}\p{Nd}\p{Nl}]/u.test(char) && /\p{ID_Continue}/u.test(char);
+
+/**
+ * Turns any JSON key into PascalCase words: "home address" → HomeAddress, "HOME_ADDRESS" →
+ * HomeAddress, "2fa" → Item2fa. Words are runs of identifier characters (see identifierPart);
+ * everything else separates them, so the result is a valid identifier in C# and TypeScript.
+ */
+export function pascalCase(key: string): string {
+  const separated = key.normalize('NFC').replace(/./gsu, (char) => (identifierPart(char) ? char : ' '));
+  const words = separated
     .replace(/([\p{Ll}\p{Nd}])(\p{Lu})/gu, '$1 $2')
-    .split(/[^\p{L}\p{M}\p{Nd}\p{Nl}]+/u)
-    .filter((word) => /^[\p{L}\p{Nd}\p{Nl}]/u.test(word));
-  let name = words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join('');
+    .split(' ')
+    .filter((word) => /^[\p{L}\p{Nd}\p{Nl}]/u.test(word))
+    // Words in capitals longer than an acronym read as ordinary words: HOME → Home, but ID stays.
+    .map((word) =>
+      word.length > 2 && word === word.toUpperCase() && /\p{Lu}/u.test(word) ? word.toLowerCase() : word,
+    );
+  const name = words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join('');
   if (name === '') return 'Item';
-  if (/^\p{Nd}/u.test(name)) name = `Item${name}`;
-  return avoidReserved(name);
+  return /^\p{Nd}/u.test(name) ? `Item${name}` : name;
+}
+
+/** A type name for a JSON key: pascalCase, kept off the built-in names. */
+export function typeName(key: string): string {
+  return avoidReserved(pascalCase(key));
 }
 
 const IRREGULAR: Readonly<Record<string, string>> = {
@@ -99,6 +114,18 @@ const IRREGULAR: Readonly<Record<string, string>> = {
   gases: 'gas',
   quizzes: 'quiz',
   buses: 'bus',
+  statuses: 'status',
+  viruses: 'virus',
+  campuses: 'campus',
+  bonuses: 'bonus',
+  censuses: 'census',
+  beaches: 'beach',
+  coaches: 'coach',
+  peaches: 'peach',
+  approaches: 'approach',
+  heroes: 'hero',
+  potatoes: 'potato',
+  tomatoes: 'tomato',
 };
 
 /** Words that are the same in the plural, or have no singular worth using. */
@@ -123,6 +150,11 @@ const UNCOUNTABLE = new Set([
  * the result is the name followed by Item. Pass the result through avoidReserved: Errors → Error.
  */
 export function singular(name: string): string {
+  // Items2 → Item2: singular of the words, then the number back.
+  const numbered = /^(.*\D)(\d+)$/.exec(name);
+  if (numbered) return singular(numbered[1] ?? '') + (numbered[2] ?? '');
+  if (name.endsWith('Item')) return name;
+
   const split = /^(.*?)(\p{Lu}[^\p{Lu}]*)$/u.exec(name);
   const head = split?.[1] ?? '';
   const last = split?.[2] ?? name;
@@ -136,7 +168,9 @@ export function singular(name: string): string {
   if (/\p{Lu}{2,}s$/u.test(name)) return name.slice(0, -1);
   if (lower.length < 3) return `${name}Item`;
   if (/[^aeiou]ies$/.test(lower)) return restore(`${lower.slice(0, -3)}y`);
-  if (/(?:ss|x|ch|sh|zz|us)es$/.test(lower)) return restore(lower.slice(0, -2));
+  // Boxes, Addresses, Wishes, Buzzes, and -ches after t, n or r (Matches, Branches, Churches).
+  // Other -ches and -uses lose only the s: Caches, Niches, Houses, Causes.
+  if (/(?:ss|x|sh|zz|[tnr]ch)es$/.test(lower)) return restore(lower.slice(0, -2));
   if (/[^isu]s$/.test(lower)) return restore(lower.slice(0, -1));
   return `${name}Item`;
 }

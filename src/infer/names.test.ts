@@ -18,6 +18,10 @@ describe('typeName', () => {
     ['x²', 'X'],
     ['½price', 'Price'],
     ['Ⅻ', 'Ⅻ'],
+    ['HOME_ADDRESS', 'HomeAddress'],
+    ['USER_ID', 'UserID'],
+    ['b\u20ddc', 'BC'],
+    ['x\u2e2fy', 'XY'],
     ['string', 'StringItem'],
     ['date', 'DateItem'],
   ])('%j → %s', (key, name) => {
@@ -54,6 +58,19 @@ describe('singular', () => {
     ['Class', 'ClassItem'],
     ['List', 'ListItem'],
     ['Os', 'OsItem'],
+    ['Houses', 'House'],
+    ['Clauses', 'Clause'],
+    ['Causes', 'Cause'],
+    ['Caches', 'Cache'],
+    ['Niches', 'Niche'],
+    ['Matches', 'Match'],
+    ['Branches', 'Branch'],
+    ['Churches', 'Church'],
+    ['Wishes', 'Wish'],
+    ['Viruses', 'Virus'],
+    ['Heroes', 'Hero'],
+    ['Items2', 'Item2'],
+    ['ListItem', 'ListItem'],
   ])('%s → %s', (plural, name) => {
     expect(singular(plural)).toBe(name);
   });
