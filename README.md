@@ -10,7 +10,7 @@ and [milestones](https://github.com/jonathascosta/json2types/milestones): one mi
 
 ## Development
 
-Requires Node.js 22.13 or later (see `.nvmrc`).
+Requires Node.js 22.13 or later, or 24, or 26 and later (see `.nvmrc`).
 
 ```sh
 npm ci           # install
