@@ -100,7 +100,7 @@ describe('parseJson', () => {
     ["{'a': 1}", 'Expected a property name in quotes, found U+0027', 1, 2],
     ['{"a" 1}', "Expected ':' after a property name, found '1'", 1, 6],
     ['"abc', 'Unterminated string', 1, 1],
-    ['"a\tb"', 'Control characters must be escaped in strings', 1, 3],
+    ['"a\tb"', 'Control characters must be escaped in strings, found U+0009', 1, 3],
     [String.raw`"\x"`, "Invalid escape: a backslash followed by 'x'", 1, 2],
     ['"\\\n"', 'Invalid escape: a backslash followed by U+000A', 1, 2],
     [String.raw`"\u12"`, String.raw`Invalid \u escape: expected four hex digits`, 1, 2],

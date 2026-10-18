@@ -441,7 +441,15 @@ describe('inferModel', () => {
     );
     const start = performance.now();
     const model = infer(`{${keys.join(',')}}`);
-    expect(new Set(model.diagnostics.map((d) => d.path)).size).toBe(20_000);
+    // 100 diagnostics, all at different paths, then one line counting the rest.
+    expect(model.diagnostics).toHaveLength(101);
+    expect(new Set(model.diagnostics.slice(0, 100).map((d) => d.path)).size).toBe(100);
+    expect(model.diagnostics[100]).toEqual({
+      path: '$',
+      severity: 'info',
+      message: '19900 more diagnostics not shown.',
+      count: 19_900,
+    });
     expect(performance.now() - start).toBeLessThan(5000);
   });
 
@@ -453,6 +461,22 @@ describe('inferModel', () => {
     expect(model.diagnostics).toHaveLength(1);
     expect(model.diagnostics[0]?.count).toBe(20_000);
     expect(performance.now() - start).toBeLessThan(5000);
+  });
+
+  it('keeps the order keys were first seen, even with a repeated key', () => {
+    const model = infer('[{"a":1,"b":1,"b":2},{"c":1,"d":1,"d":2}]');
+    expect(declaration(model, 'Root')?.properties.map((p) => p.jsonName)).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('shares empty objects that have the same name hint', () => {
+    expect(names(infer('{"a":{},"b":{"a":{}}}'))).toEqual(['Root', 'A', 'B']);
+  });
+
+  it('cuts very long names to 100 characters and keeps them apart', () => {
+    const long = 'x'.repeat(1000);
+    const model = infer(`{"${long}1":{"a":1},"${long}2":{"b":1}}`);
+    expect(names(model).map((n) => n.length)).toEqual([4, 100, 101]);
+    expect(declaration(model, 'Root')?.properties.map((p) => p.name.length)).toEqual([100, 101]);
   });
 
   it('copes with odd property names', () => {

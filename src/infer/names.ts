@@ -170,7 +170,9 @@ export function pascalCase(key: string): string {
     .map((word) =>
       word.length > 2 && word === word.toUpperCase() && /\p{Lu}/u.test(word) ? word.toLowerCase() : word,
     );
-  const name = words.map(capitalise).join('');
+  // C# rejects identifiers over 511 characters (CS0645); 100 is plenty, and numbering keeps names
+  // that meet after the cut apart.
+  const name = Array.from(words.map(capitalise).join('')).slice(0, 100).join('');
   if (name === '') return 'Item';
   return /^\p{Nd}/u.test(name) ? `Item${name}` : name;
 }
@@ -237,6 +239,8 @@ const IRREGULAR = new Map(
     phenomena: 'phenomenon',
     axes: 'axis',
     apis: 'api',
+    tvs: 'tv',
+    octopi: 'octopus',
     hippies: 'hippie',
     genies: 'genie',
     aunties: 'auntie',
@@ -324,12 +328,14 @@ const SINGULAR_IN_S = new Set([
   'gas',
   'has',
   'ios',
+  'its',
   'kudos',
   'lens',
   'means',
   'pants',
   'pathos',
   'plus',
+  'pos',
   'this',
   'tos',
   'was',

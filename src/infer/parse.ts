@@ -107,7 +107,7 @@ export function parseJson(text: string): JsonValue {
         pos++;
         return result;
       }
-      if (c < 0x20) fail('Control characters must be escaped in strings');
+      if (c < 0x20) fail(`Control characters must be escaped in strings, found ${describe(pos)}`);
       if (c !== 0x5c) {
         pos++;
         continue;

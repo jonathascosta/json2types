@@ -23,6 +23,9 @@ export function inferModel(json: JsonValue, options: InferOptions = {}): Model {
   return { root: { type, nullable: root.nullable }, declarations, diagnostics: diagnostics.list() };
 }
 
+/** How many diagnostics a model carries; past this, one more line counts the rest. */
+export const MAX_DIAGNOSTICS = 100;
+
 interface Entry {
   path: string;
   severity: Diagnostic['severity'];
@@ -54,8 +57,14 @@ class Diagnostics {
     this.entries.push(entry);
   }
 
+  /** At most MAX_DIAGNOSTICS, then one line saying how many more there were. */
   list(): Diagnostic[] {
-    return this.entries;
+    if (this.entries.length <= MAX_DIAGNOSTICS) return this.entries;
+    const more = this.entries.length - MAX_DIAGNOSTICS;
+    return [
+      ...this.entries.slice(0, MAX_DIAGNOSTICS),
+      { path: '$', severity: 'info', message: `${String(more)} more diagnostics not shown.`, count: more },
+    ];
   }
 }
 
@@ -279,19 +288,22 @@ function addSample(shape: Shape, value: JsonValue, diagnostics: Diagnostics): vo
         }
         return field;
       };
-      // As in JSON.parse, the last of a repeated key wins.
+      // As in JSON.parse, the last of a repeated key wins. Fields are created in the order keys are
+      // first seen, and only then are repeats reported, so a repeat doesn't change that order.
       const fields = new Map<string, JsonValue>();
+      const repeated: string[] = [];
       for (const { key, value: fieldValue } of value.entries) {
-        if (fields.has(key)) {
-          diagnostics.add(
-            fieldFor(key),
-            'warning',
-            `The key ${JSON.stringify(shownKey(key))} appears more than once in the same object; the last value is used.`,
-          );
-        }
+        if (fields.has(key)) repeated.push(key);
         fields.set(key, fieldValue);
       }
       for (const [key, fieldValue] of fields) addSample(fieldFor(key), fieldValue, diagnostics);
+      for (const key of repeated) {
+        diagnostics.add(
+          fieldFor(key),
+          'warning',
+          `The key ${JSON.stringify(shownKey(key))} appears more than once in the same object; the last value is used.`,
+        );
+      }
       return;
     }
   }
@@ -422,17 +434,19 @@ class Resolver {
 
     // Only objects with the same name hint are shared (billing.address and shipping.address), so a
     // user and a product that both happen to be {"id": …} keep their own types. Property order
-    // doesn't matter; the first type found keeps its own. Empty objects aren't shared at all.
+    // doesn't matter; the first type found keeps its own. Empty objects are shared by hint alone.
     const sorted = [...properties].sort((a, b) => compare(a.jsonName, b.jsonName));
     const structure =
-      properties.length === 0 ? null : JSON.stringify([nameHint, sorted.map((p) => this.structureOf(p))]);
-    const existing = structure === null ? undefined : this.byStructure.get(structure);
+      properties.length === 0
+        ? JSON.stringify([nameHint, 'empty'])
+        : JSON.stringify([nameHint, sorted.map((p) => this.structureOf(p))]);
+    const existing = this.byStructure.get(structure);
     if (existing) return { kind: 'object', name: existing };
 
     const id = `#${String(this.pending.length)}`;
     this.pending.push({ hint: nameHint, properties });
-    if (structure === null) this.empty.add(id);
-    else this.byStructure.set(structure, id);
+    if (properties.length === 0) this.empty.add(id);
+    this.byStructure.set(structure, id);
     return { kind: 'object', name: id };
   }
 
