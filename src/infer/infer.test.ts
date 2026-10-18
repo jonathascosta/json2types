@@ -262,7 +262,7 @@ describe('inferModel', () => {
     expect(names(infer('{"user":{"id":1},"product":{"id":2}}'))).toEqual(['Root', 'User', 'Product']);
   });
 
-  it('shares parents that differ only by empty objects, but not the empty objects themselves', () => {
+  it('shares parents that differ only by empty objects, and the empty objects too', () => {
     const model = infer('[{"a":{"x":{}}},{"a":{"x":{}}}]');
     expect(names(model)).toEqual(['Root', 'A', 'X']);
     expect(names(infer('{"items":[{"x":{}},{"x":{}}]}'))).toEqual(['Root', 'Item', 'X']);
@@ -461,6 +461,37 @@ describe('inferModel', () => {
     expect(model.diagnostics).toHaveLength(1);
     expect(model.diagnostics[0]?.count).toBe(20_000);
     expect(performance.now() - start).toBeLessThan(5000);
+  });
+
+  it('lists warnings before notes, and says when the cut hides warnings', () => {
+    const notes = Array.from({ length: 150 }, (_, i) => `"n${String(i)}":null`).join(',');
+    const model = infer(`{${notes},"mixed":[1,"a"]}`);
+    expect(model.diagnostics[0]?.path).toBe('$.mixed[*]');
+    expect(model.diagnostics).toHaveLength(101);
+    expect(model.diagnostics[100]).toMatchObject({
+      severity: 'info',
+      message: '51 more diagnostics not shown.',
+    });
+    const mixes = Array.from({ length: 150 }, (_, i) => `"m${String(i)}":[1,"a"]`).join(',');
+    expect(infer(`{${mixes}}`).diagnostics[100]).toMatchObject({
+      severity: 'warning',
+      message: '50 more diagnostics not shown, 50 of them warnings.',
+      count: 50,
+    });
+  });
+
+  it('shortens very deep paths in the middle', () => {
+    const deep = `${'{"level":'.repeat(200)}[null]${'}'.repeat(200)}`;
+    const path = infer(deep).diagnostics[0]?.path ?? '';
+    expect(Array.from(path)).toHaveLength(301);
+    expect(path.startsWith('$.level.level')).toBe(true);
+    expect(path.endsWith('.level[*]')).toBe(true);
+  });
+
+  it('does not number a type into a name another type has by itself', () => {
+    const model = infer('{"x":{"a":{"p":1}},"y":{"a":{"q":1}},"a2":{"r":1}}');
+    expect(names(model)).toEqual(['Root', 'X', 'Y', 'A2', 'A', 'A3']);
+    expect(property(model, 'Root', 'a2')?.type).toEqual({ kind: 'object', name: 'A2' });
   });
 
   it('keeps the order keys were first seen, even with a repeated key', () => {

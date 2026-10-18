@@ -59,13 +59,35 @@ class Diagnostics {
 
   /** At most MAX_DIAGNOSTICS, then one line saying how many more there were. */
   list(): Diagnostic[] {
-    if (this.entries.length <= MAX_DIAGNOSTICS) return this.entries;
-    const more = this.entries.length - MAX_DIAGNOSTICS;
+    // Warnings first (in the order found), so a flood of notes can't push them out of the list.
+    const ordered = [
+      ...this.entries.filter((e) => e.severity === 'warning'),
+      ...this.entries.filter((e) => e.severity === 'info'),
+    ].map((e) => ({ ...e, path: shortPath(e.path) }));
+    if (ordered.length <= MAX_DIAGNOSTICS) return ordered;
+    const hidden = ordered.slice(MAX_DIAGNOSTICS);
+    const warnings = hidden.filter((e) => e.severity === 'warning').length;
     return [
-      ...this.entries.slice(0, MAX_DIAGNOSTICS),
-      { path: '$', severity: 'info', message: `${String(more)} more diagnostics not shown.`, count: more },
+      ...ordered.slice(0, MAX_DIAGNOSTICS),
+      {
+        path: '$',
+        severity: warnings > 0 ? 'warning' : 'info',
+        message:
+          warnings > 0
+            ? `${String(hidden.length)} more diagnostics not shown, ${String(warnings)} of them warnings.`
+            : `${String(hidden.length)} more diagnostics not shown.`,
+        // Here the count is of hidden diagnostics, not of occurrences.
+        count: hidden.length,
+      },
     ];
   }
+}
+
+/** A path for display: very deep ones keep their start and their end. */
+function shortPath(path: string): string {
+  if (path.length <= 300) return path;
+  const chars = Array.from(path);
+  return chars.length <= 300 ? path : `${chars.slice(0, 100).join('')}…${chars.slice(-200).join('')}`;
 }
 
 // Phase 1: everything seen at each place in the JSON, merged into one shape.
@@ -351,8 +373,6 @@ class Resolver {
   private readonly pending: Pending[] = [];
   /** Placeholder id by name hint and structure, so identical objects in alike places share one type. */
   private readonly byStructure = new Map<string, string>();
-  /** Placeholder ids of empty objects, which compare equal when their parents are compared. */
-  private readonly empty = new Set<string>();
 
   constructor(private readonly diagnostics: Diagnostics) {}
 
@@ -437,27 +457,14 @@ class Resolver {
     // doesn't matter; the first type found keeps its own. Empty objects are shared by hint alone.
     const sorted = [...properties].sort((a, b) => compare(a.jsonName, b.jsonName));
     const structure =
-      properties.length === 0
-        ? JSON.stringify([nameHint, 'empty'])
-        : JSON.stringify([nameHint, sorted.map((p) => this.structureOf(p))]);
+      properties.length === 0 ? JSON.stringify([nameHint, 'empty']) : JSON.stringify([nameHint, sorted]);
     const existing = this.byStructure.get(structure);
     if (existing) return { kind: 'object', name: existing };
 
     const id = `#${String(this.pending.length)}`;
     this.pending.push({ hint: nameHint, properties });
-    if (properties.length === 0) this.empty.add(id);
     this.byStructure.set(structure, id);
     return { kind: 'object', name: id };
-  }
-
-  /** A property for comparing structures, with every empty object written the same way. */
-  private structureOf(property: Property): unknown {
-    const erase = (type: TypeRef): unknown => {
-      if (type.kind === 'array') return { ...type, items: { ...type.items, type: erase(type.items.type) } };
-      if (type.kind === 'object' && this.empty.has(type.name)) return { kind: 'object', name: '{}' };
-      return type;
-    };
-    return { ...property, type: erase(property.type) };
   }
 
   /** Names the collected types from the root down; returns the root and the declarations. */
@@ -466,11 +473,16 @@ class Resolver {
     const used = new Set<string>();
     // The next number to try per hint, so thousands of types wanting one name stay linear.
     const nextNumber = new Map<string, number>();
+    // Every type's own hint, so a numbered name doesn't take one another type wants (A2 for a
+    // second A when there is also an a2).
+    const natural = new Set([rootName, ...this.pending.map((p) => p.hint)]);
     const claim = (hint: string): string => {
       let name = hint;
       let n = nextNumber.get(hint) ?? 2;
       // Numbered names skip the built-in ones too: Int → Int2, …, never Int16.
-      while (used.has(name) || name !== avoidReserved(name)) name = `${hint}${String(n++)}`;
+      while (used.has(name) || name !== avoidReserved(name) || (name !== hint && natural.has(name))) {
+        name = `${hint}${String(n++)}`;
+      }
       nextNumber.set(hint, n);
       used.add(name);
       return name;

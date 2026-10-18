@@ -74,8 +74,8 @@ describe('parseJson', () => {
   });
 
   it('rejects whitespace JSON does not allow', () => {
-    expect(errorOf('[1,\f2]').message).toBe('Unexpected U+000C (line 1, column 4)');
-    expect(errorOf('[1,\v2]').message).toBe('Unexpected U+000B (line 1, column 4)');
+    expect(errorOf('[1,\f2]').message).toBe('Expected a value, found U+000C (line 1, column 4)');
+    expect(errorOf('[1,\v2]').message).toBe('Expected a value, found U+000B (line 1, column 4)');
   });
 
   it('accepts a byte order mark and surrounding whitespace', () => {
@@ -93,7 +93,7 @@ describe('parseJson', () => {
   });
 
   it.each([
-    ['', 'Unexpected end of the input', 1, 1],
+    ['', 'Expected a value, found the end of the input', 1, 1],
     ['{"a": 1,}', 'Trailing comma before }', 1, 8],
     ['[1, 2,]', 'Trailing comma before ]', 1, 6],
     ['{\n  "a": 1\n  "b": 2\n}', "Expected '}' or a comma after a property, found '\"'", 3, 3],
@@ -108,18 +108,21 @@ describe('parseJson', () => {
     ['01', 'Invalid number', 1, 1],
     ['1.', 'Invalid number', 1, 1],
     ['{} x', "Unexpected 'x' after the JSON value", 1, 4],
-    ['NaN', "Unexpected 'N'", 1, 1],
+    ['NaN', "Expected a value, found 'N'", 1, 1],
     ['-', 'Invalid number', 1, 1],
     ['-a', 'Invalid number', 1, 1],
     ['-.5', 'Invalid number', 1, 1],
     ['-01', 'Invalid number', 1, 1],
-    ['+1', "Unexpected '+'", 1, 1],
-    ['.5', "Unexpected '.'", 1, 1],
+    ['+1', "Expected a value, found '+'", 1, 1],
+    ['.5', "Expected a value, found '.'", 1, 1],
+    ['{"a":}', "Expected a value, found '}'", 1, 6],
+    ['[1,,2]', "Expected a value, found ','", 1, 4],
+    ['0x1', 'Invalid number', 1, 1],
     ['1e', 'Invalid number', 1, 1],
     ['1e+', 'Invalid number', 1, 1],
     ['[1, 1.5.2]', 'Invalid number', 1, 5],
     ['nul', 'Invalid literal: expected true, false or null', 1, 1],
-    ['\uFEFF}', "Unexpected '}'", 1, 1],
+    ['\uFEFF}', "Expected a value, found '}'", 1, 1],
     ['truex', "Unexpected 'x' after the JSON value", 1, 5],
     ['"ab\\', 'Unterminated string', 1, 1],
   ])('reports %j with its position', (text, message, line, column) => {
@@ -142,15 +145,15 @@ describe('parseJson', () => {
   });
 
   it('names invisible characters by code point', () => {
-    expect(errorOf('[1,\u00a0 2]').message).toBe('Unexpected U+00A0 (line 1, column 4)');
+    expect(errorOf('[1,\u00a0 2]').message).toBe('Expected a value, found U+00A0 (line 1, column 4)');
     expect(errorOf('{"a":1}\u2028').message).toBe(
       'Unexpected U+2028 after the JSON value (line 1, column 8)',
     );
-    expect(errorOf('[😀]').message).toBe("Unexpected '😀' (line 1, column 2)");
+    expect(errorOf('[😀]').message).toBe("Expected a value, found '😀' (line 1, column 2)");
   });
 
   it('treats a lone byte order mark as empty input', () => {
-    expect(errorOf('\uFEFF').message).toBe('Unexpected end of the input (line 1, column 1)');
+    expect(errorOf('\uFEFF').message).toBe('Expected a value, found the end of the input (line 1, column 1)');
   });
 
   it('parses half a megabyte in reasonable time', () => {

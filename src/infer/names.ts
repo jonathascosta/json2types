@@ -5,7 +5,9 @@
 
 /**
  * Names that would shadow a built-in or very common type in C# or TypeScript (`class String`,
- * `interface Date`) and confuse anyone reading the generated code. Deliberately not exhaustive:
+ * `interface Date`) and confuse anyone reading the generated code, plus the attributes the C#
+ * output writes (a class JsonPropertyName would make [JsonPropertyName] ambiguous, CS1614).
+ * Deliberately not exhaustive:
  * the TypeScript output is a module, so other globals aren't merged into.
  */
 const RESERVED = new Set([
@@ -67,8 +69,19 @@ const RESERVED = new Set([
   'Iterable',
   'Iterator',
   'Json',
+  'JsonConstructor',
+  'JsonConverter',
+  'JsonDerivedType',
   'JsonElement',
+  'JsonExtensionData',
+  'JsonIgnore',
+  'JsonInclude',
   'JsonNode',
+  'JsonPolymorphic',
+  'JsonProperty',
+  'JsonPropertyName',
+  'JsonRequired',
+  'JsonSerializer',
   'Lazy',
   'List',
   'Location',
@@ -81,6 +94,7 @@ const RESERVED = new Set([
   'Nullable',
   'Number',
   'Object',
+  'Obsolete',
   'Omit',
   'Option',
   'Parameters',
@@ -101,6 +115,7 @@ const RESERVED = new Set([
   'ReturnType',
   'SByte',
   'Selection',
+  'Serializable',
   'Set',
   'Single',
   'Span',
@@ -239,6 +254,8 @@ const IRREGULAR = new Map(
     phenomena: 'phenomenon',
     axes: 'axis',
     apis: 'api',
+    wifis: 'wifi',
+    does: 'doe',
     tvs: 'tv',
     octopi: 'octopus',
     hippies: 'hippie',
@@ -326,6 +343,7 @@ const SINGULAR_IN_S = new Set([
   'cos',
   'ethos',
   'gas',
+  'goes',
   'has',
   'ios',
   'its',
@@ -336,6 +354,7 @@ const SINGULAR_IN_S = new Set([
   'pathos',
   'plus',
   'pos',
+  'texas',
   'this',
   'tos',
   'was',
@@ -364,6 +383,7 @@ const UNCOUNTABLE = new Set([
   'ethics',
   'electronics',
   'logistics',
+  'gymnastics',
 ]);
 
 /**

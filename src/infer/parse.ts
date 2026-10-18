@@ -208,11 +208,11 @@ export function parseJson(text: string): JsonValue {
         const match = NUMBER.exec(text);
         if (!match) {
           if (char === '-') return fail('Invalid number');
-          return fail(pos >= text.length ? 'Unexpected end of the input' : `Unexpected ${describe(pos)}`);
+          return fail(`Expected a value, found ${describe(pos)}`);
         }
         pos += match[0].length;
-        // A number cut short or run on (01, 1., 1e, 1.5.2) is one bad number, not two tokens.
-        if (/[\d.eE+-]/.test(text[pos] ?? '')) fail('Invalid number', pos - match[0].length);
+        // A number cut short or run on (01, 1., 1e, 1.5.2, 0x1) is one bad number, not two tokens.
+        if (/[\w.+-]/.test(text[pos] ?? '')) fail('Invalid number', pos - match[0].length);
         return { type: 'number', raw: match[0] };
       }
     }
